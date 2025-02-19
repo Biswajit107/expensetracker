@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Expense Tracker</string>
+    <string name="total_credits">Total Credits</string>
+    <string name="total_debits">Total Debits</string>
+    <string name="balance">Balance</string>
+    <string name="monthly_budget">Monthly Budget</string>
+    <string name="all_banks">All Banks</string>
+    <string name="all_types">All Types</string>
+    <string name="spending_alert">Spending Alert</string>
+    <string name="spending_warning">Warning: You have spent %.1f%% of your monthly budget!</string>
+</resources>
