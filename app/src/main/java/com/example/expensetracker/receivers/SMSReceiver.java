@@ -26,30 +26,6 @@ import java.util.regex.Pattern;
 public class SMSReceiver extends BroadcastReceiver {
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
-    // HDFC Patterns
-    private static final Pattern HDFC_DEBIT_CARD = Pattern.compile(
-            "(?i)Alert: Rs\\.(\\d+,?\\d+\\.?\\d{0,2}) spent on HDFC Bank (\\w+) Card (?:xx\\d{4}) at (.*?) on (\\d{2}-\\d{2}-\\d{2})"
-    );
-    private static final Pattern HDFC_CREDIT_CARD = Pattern.compile(
-            "(?i)Rs\\.(\\d+,?\\d+\\.?\\d{0,2}) spent on HDFC Bank CREDIT Card (?:xx\\d{4}) at (.*?) on (\\d{2}-\\d{2}-\\d{2})"
-    );
-    private static final Pattern HDFC_ACCOUNT_DEBIT = Pattern.compile(
-            "(?i)HDFC Bank: Rs\\.(\\d+,?\\d+\\.?\\d{0,2}) debited from a/c XX\\d{4} on (\\d{2}-\\d{2}-\\d{2})(.*?)Avl bal: Rs\\."
-    );
-    private static final Pattern HDFC_ACCOUNT_CREDIT = Pattern.compile(
-            "(?i)HDFC Bank: Rs\\.(\\d+,?\\d+\\.?\\d{0,2}) credited to a/c XX\\d{4} on (\\d{2}-\\d{2}-\\d{2})(.*?)Avl bal: Rs\\."
-    );
-    private static final Pattern HDFC_UPI_DEBIT = Pattern.compile(
-            "(?i)(?:UPI|NEFT|IMPS): Rs\\.(\\d+,?\\d+\\.?\\d{0,2}) debited from a/c XX\\d{4} on (\\d{2}-\\d{2}-\\d{2})(.*?)UPI Ref No:"
-    );
-    private static final Pattern HDFC_UPI_CREDIT = Pattern.compile(
-            "(?i)(?:UPI|NEFT|IMPS): Rs\\.(\\d+,?\\d+\\.?\\d{0,2}) credited to a/c XX\\d{4} on (\\d{2}-\\d{2}-\\d{2})(.*?)UPI Ref No:"
-    );
-
-//    private static final Pattern HDFC_UPI_DEBIT = Pattern.compile(
-//            "Sent Rs\\.(\\d+\\.\\d{2})\\s+From HDFC Bank A/C.*?To\\s+(.*?)\\s+On\\s+(\\d{2}/\\d{2}/\\d{2})"
-//    );
-
     @Override
     public void onReceive(Context context, Intent intent) {
         if (Telephony.Sms.Intents.SMS_RECEIVED_ACTION.equals(intent.getAction())) {
@@ -84,18 +60,6 @@ public class SMSReceiver extends BroadcastReceiver {
     }
 
     public void parseAndSaveTransaction(Context context, String message) {
-        // Try all HDFC patterns
-        // Preprocess message: replace line breaks with spaces and trim extra spaces
-//        String processedMessage = message.replaceAll("\\s+", " ").trim();
-//        Transaction transaction = parseHDFCTransaction(processedMessage);
-//
-//        if (transaction != null) {
-//            executorService.execute(() -> {
-//                TransactionDatabase.getInstance(context)
-//                        .transactionDao()
-//                        .insert(transaction);
-//            });
-//        }
         // Clean the message
         String cleanMessage = message.replaceAll("\n", " ")
                 .replaceAll("\\s+", " ")
@@ -304,98 +268,5 @@ public class SMSReceiver extends BroadcastReceiver {
                     .transactionDao()
                     .insert(transaction);
         });
-    }
-
-    private Transaction parseHDFCTransaction(String message) {
-        // Try HDFC Debit Card
-        Matcher matcher = HDFC_DEBIT_CARD.matcher(message);
-        if (matcher.find()) {
-            return new Transaction(
-                    "HDFC",
-                    "DEBIT",
-                    parseAmount(matcher.group(1)),
-                    parseDate(matcher.group(4)),
-                    "Card payment at " + matcher.group(3)
-            );
-        }
-
-        // Try HDFC Credit Card
-        matcher = HDFC_CREDIT_CARD.matcher(message);
-        if (matcher.find()) {
-            return new Transaction(
-                    "HDFC",
-                    "DEBIT",
-                    parseAmount(matcher.group(1)),
-                    parseDate(matcher.group(3)),
-                    "Credit Card payment at " + matcher.group(2)
-            );
-        }
-
-        // Try HDFC Account Debit
-        matcher = HDFC_ACCOUNT_DEBIT.matcher(message);
-        if (matcher.find()) {
-            return new Transaction(
-                    "HDFC",
-                    "DEBIT",
-                    parseAmount(matcher.group(1)),
-                    parseDate(matcher.group(2)),
-                    "Account debit: " + matcher.group(3).trim()
-            );
-        }
-
-        // Try HDFC Account Credit
-        matcher = HDFC_ACCOUNT_CREDIT.matcher(message);
-        if (matcher.find()) {
-            return new Transaction(
-                    "HDFC",
-                    "CREDIT",
-                    parseAmount(matcher.group(1)),
-                    parseDate(matcher.group(2)),
-                    "Account credit: " + matcher.group(3).trim()
-            );
-        }
-
-        // Try HDFC UPI Debit
-        matcher = HDFC_UPI_DEBIT.matcher(message);
-        if (matcher.find()) {
-            return new Transaction(
-                    "HDFC",
-                    "DEBIT",
-                    parseAmount(matcher.group(1)),
-                    parseDate(matcher.group(2)),
-                    "UPI payment: " + matcher.group(3).trim()
-            );
-        }
-
-        // Try HDFC UPI Credit
-        matcher = HDFC_UPI_CREDIT.matcher(message);
-        if (matcher.find()) {
-            return new Transaction(
-                    "HDFC",
-                    "CREDIT",
-                    parseAmount(matcher.group(1)),
-                    parseDate(matcher.group(2)),
-                    "UPI received: " + matcher.group(3).trim()
-            );
-        }
-
-        return null;
-    }
-
-    private double parseAmount(String amountStr) {
-        try {
-            return Double.parseDouble(amountStr.replace(",", ""));
-        } catch (NumberFormatException e) {
-            return 0.0;
-        }
-    }
-
-    private long parseDate(String dateStr) {
-        try {
-            SimpleDateFormat format = new SimpleDateFormat("dd-MM-yy", Locale.getDefault());
-            return format.parse(dateStr).getTime();
-        } catch (ParseException e) {
-            return System.currentTimeMillis();
-        }
     }
 }

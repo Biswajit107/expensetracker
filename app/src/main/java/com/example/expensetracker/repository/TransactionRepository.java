@@ -1,6 +1,9 @@
 package com.example.expensetracker.repository;
 
 import android.app.Application;
+import android.os.Handler;
+import android.os.Looper;
+
 import androidx.lifecycle.LiveData;
 import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.database.TransactionDao;
@@ -78,4 +81,19 @@ public class TransactionRepository {
     public interface Callback<T> {
         void onResult(T result);
     }
+
+    public LiveData<List<Transaction>> getTransactionsBetweenDates(long startDate, long endDate) {
+        return transactionDao.getTransactionsBetweenDates(startDate, endDate);
+    }
+
+    public void getTransactionsBetweenDates(long startDate, long endDate, Callback<List<Transaction>> callback) {
+        executorService.execute(() -> {
+            List<Transaction> transactions = transactionDao.getTransactionsBetweenDatesSync(startDate, endDate);
+            new Handler(Looper.getMainLooper()).post(() -> {
+                callback.onResult(transactions);
+            });
+        });
+    }
+
+
 }

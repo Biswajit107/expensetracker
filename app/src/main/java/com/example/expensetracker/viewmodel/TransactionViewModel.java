@@ -82,4 +82,19 @@ public class TransactionViewModel extends AndroidViewModel {
         }
         return total;
     }
+
+    public void refreshTransactions() {
+        // This will trigger observers and update the UI
+        allTransactions = repository.getAllTransactions();
+    }
+
+    public LiveData<List<Transaction>> getTransactionsBetweenDates(long startDate, long endDate) {
+        return repository.getTransactionsBetweenDates(startDate, endDate);
+    }
+
+    public void getTransactionsBetweenDates(long startDate, long endDate, TransactionRepository.Callback<List<Transaction>> callback) {
+        repository.getTransactionsBetweenDates(startDate, endDate, callback);
+    }
+
+
 }

@@ -4,14 +4,15 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginHorizontal="8dp"
-    android:layout_marginVertical="4dp">
+    android:layout_marginBottom="8dp"
+    app:cardElevation="2dp"
+    app:cardCornerRadius="8dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="12dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -21,23 +22,41 @@
 
             <TextView
                 android:id="@+id/dateText"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="#616161"
                 android:textSize="14sp"/>
 
             <TextView
                 android:id="@+id/bankText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:textSize="14sp"
-                android:textStyle="bold"/>
+                android:textColor="#424242"
+                android:textStyle="bold"
+                android:textSize="14sp"/>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:id="@+id/descriptionText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="#757575"
+                android:textSize="15sp"/>
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/typeChip"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
+                app:chipBackgroundColor="@color/chip_background"
+                app:chipMinHeight="24dp"
                 android:textSize="12sp"/>
         </LinearLayout>
 
@@ -45,15 +64,8 @@
             android:id="@+id/amountText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="18sp"
-            android:textStyle="bold"/>
-
-        <TextView
-            android:id="@+id/descriptionText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textSize="14sp"/>
+            android:gravity="end"
+            android:textStyle="bold"
+            android:textSize="16sp"/>
     </LinearLayout>
-
 </com.google.android.material.card.MaterialCardView>

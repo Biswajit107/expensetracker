@@ -50,4 +50,10 @@ public interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE messageHash = :hash LIMIT 1")
     Transaction getTransactionByHash(String hash);
+
+    @Query("SELECT * FROM transactions WHERE date BETWEEN :startDate AND :endDate")
+    LiveData<List<Transaction>> getTransactionsBetweenDates(long startDate, long endDate);
+
+    @Query("SELECT * FROM transactions WHERE date BETWEEN :startDate AND :endDate ORDER BY date DESC")
+    List<Transaction> getTransactionsBetweenDatesSync(long startDate, long endDate);
 }
