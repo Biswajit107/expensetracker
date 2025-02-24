@@ -33,6 +33,7 @@ import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.receivers.SMSReceiver;
 import com.example.expensetracker.viewmodel.TransactionViewModel;
 import com.example.expensetracker.utils.PreferencesManager;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 
@@ -52,8 +53,8 @@ public class MainActivity extends AppCompatActivity {
 
     private TransactionViewModel viewModel;
     private TransactionAdapter adapter;
-    private Spinner bankSpinner;
-    private Spinner typeSpinner;
+    private AutoCompleteTextView bankSpinner;
+    private AutoCompleteTextView typeSpinner;
     private EditText budgetInput;
     private TextView totalDebitsText;
     private TextView totalCreditsText;
@@ -83,6 +84,7 @@ public class MainActivity extends AppCompatActivity {
         setupDateRangeUI();
         setupDefaultDates();
         checkAndRequestSMSPermissions();
+        setupBottomNavigation();
     }
 
     private void setupDefaultDates() {
@@ -146,39 +148,29 @@ public class MainActivity extends AppCompatActivity {
         // Setup Bank Spinner
         ArrayAdapter<String> bankAdapter = new ArrayAdapter<>(
                 this,
-                android.R.layout.simple_spinner_item,
+                android.R.layout.simple_spinner_dropdown_item,
                 new String[]{"All Banks", "HDFC", "ICICI", "SBI"}
         );
-        bankAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         bankSpinner.setAdapter(bankAdapter);
 
         // Setup Type Spinner
         ArrayAdapter<String> typeAdapter = new ArrayAdapter<>(
                 this,
-                android.R.layout.simple_spinner_item,
+                android.R.layout.simple_spinner_dropdown_item,
                 new String[]{"All Types", "DEBIT", "CREDIT"}
         );
-        typeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         typeSpinner.setAdapter(typeAdapter);
 
-        bankSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                updateTransactionsList();
-            }
+        // Set default values
+        bankSpinner.setText("All Banks", false);
+        typeSpinner.setText("All Types", false);
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
+        bankSpinner.setOnItemClickListener((parent, view, position, id) -> {
+            updateTransactionsList();
         });
 
-        typeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                updateTransactionsList();
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
+        typeSpinner.setOnItemClickListener((parent, view, position, id) -> {
+            updateTransactionsList();
         });
     }
 
@@ -281,8 +273,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateTransactionsList(List<Transaction> allTransactions) {
-        String selectedBank = bankSpinner.getSelectedItem().toString();
-        String selectedType = typeSpinner.getSelectedItem().toString();
+        String selectedBank = bankSpinner.getText().toString();
+        String selectedType = typeSpinner.getText().toString();
 
         List<Transaction> filteredTransactions = new ArrayList<>();
         for (Transaction transaction : allTransactions) {
@@ -309,8 +301,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateTransactionsList() {
-        String selectedBank = bankSpinner.getSelectedItem().toString();
-        String selectedType = typeSpinner.getSelectedItem().toString();
+        String selectedBank = bankSpinner.getText().toString();
+        String selectedType = typeSpinner.getText().toString();
 
         viewModel.getTransactionsBetweenDates(fromDate, toDate, transactions -> {
             if (transactions == null) return;
@@ -375,6 +367,30 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return total;
+    }
+
+    private void setupBottomNavigation() {
+        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
+        bottomNav.setSelectedItemId(R.id.nav_home);
+        bottomNav.setOnItemSelectedListener(item -> {
+            switch (item.getItemId()) {
+                case R.id.nav_home:
+                    return true;
+                case R.id.nav_analytics:
+                    startActivity(new Intent(this, AnalyticsActivity.class));
+                    finish();
+                    return true;
+                case R.id.nav_predictions:
+                    startActivity(new Intent(this, PredictionActivity.class));
+                    finish();
+                    return true;
+                case R.id.nav_groups:
+                    startActivity(new Intent(this, GroupedExpensesActivity.class));
+                    finish();
+                    return true;
+            }
+            return false;
+        });
     }
 
     private void setupDateRangeUI() {

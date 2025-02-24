@@ -95,5 +95,9 @@ public class TransactionRepository {
         });
     }
 
+    public List<Transaction> getTransactionsBetweenDatesSync(long startDate, long endDate) {
+        return transactionDao.getTransactionsBetweenDatesSync(startDate, endDate);
+    }
+
 
 }

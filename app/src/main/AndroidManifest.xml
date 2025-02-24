@@ -22,6 +22,10 @@
             </intent-filter>
         </activity>
 
+        <activity android:name=".AnalyticsActivity" />
+        <activity android:name=".PredictionActivity" />
+        <activity android:name=".GroupedExpensesActivity" />
+
         <receiver
             android:name=".receivers.SMSReceiver"
             android:exported="true"
