@@ -1,3 +1,6 @@
+// Update the Transaction.java model class
+// The isExcludedFromTotal field already exists, we just need to utilize it better
+
 package com.example.expensetracker.models;
 
 import androidx.room.Entity;
@@ -14,6 +17,7 @@ import androidx.room.Index;
         }
 )
 public class Transaction {
+    // Existing fields
     @PrimaryKey(autoGenerate = true)
     private long id;
 
@@ -56,6 +60,9 @@ public class Transaction {
     @ColumnInfo(name = "is_excluded_from_total", defaultValue = "0")
     private boolean isExcludedFromTotal;
 
+    @ColumnInfo(name = "original_sms")
+    private String originalSms;
+
     // Constructor
     public Transaction(String bank, String type, double amount, long date, String description) {
         this.bank = bank;
@@ -65,7 +72,7 @@ public class Transaction {
         this.description = description;
     }
 
-    // Getters and Setters
+    // Getters and Setters - same as before
     public long getId() { return id; }
     public void setId(long id) { this.id = id; }
 
@@ -111,6 +118,9 @@ public class Transaction {
     public void setExcludedFromTotal(boolean excludedFromTotal) {
         isExcludedFromTotal = excludedFromTotal;
     }
+
+    public String getOriginalSms() { return originalSms; }
+    public void setOriginalSms(String originalSms) { this.originalSms = originalSms; }
 
     // Helper Methods
     public boolean isDebit() {

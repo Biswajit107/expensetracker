@@ -27,7 +27,7 @@
         <activity android:name=".GroupedExpensesActivity" />
 
         <receiver
-            android:name=".receivers.SMSReceiver"
+            android:name=".receivers.EnhancedSMSReceiver"
             android:exported="true"
             android:permission="android.permission.BROADCAST_SMS">
             <intent-filter>

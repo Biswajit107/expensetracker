@@ -29,7 +29,9 @@ import android.widget.Toast;
 
 import com.example.expensetracker.adapters.TransactionAdapter;
 import com.example.expensetracker.database.TransactionDatabase;
+import com.example.expensetracker.dialogs.TransactionEditDialog;
 import com.example.expensetracker.models.Transaction;
+import com.example.expensetracker.receivers.EnhancedSMSReceiver;
 import com.example.expensetracker.receivers.SMSReceiver;
 import com.example.expensetracker.viewmodel.TransactionViewModel;
 import com.example.expensetracker.utils.PreferencesManager;
@@ -179,7 +181,31 @@ public class MainActivity extends AppCompatActivity {
         adapter = new TransactionAdapter();
         recyclerView.setAdapter(adapter);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
+
+        // Set click listener for transactions
+        adapter.setOnTransactionClickListener(transaction -> {
+            showEditTransactionDialog(transaction);
+        });
     }
+
+    private void showEditTransactionDialog(Transaction transaction) {
+        // Create the dialog with the transaction
+        TransactionEditDialog dialog = new TransactionEditDialog(transaction);
+
+        // Set the listener for when the transaction is edited
+        dialog.setOnTransactionEditListener(editedTransaction -> {
+            // Update the transaction in the database
+            viewModel.updateTransaction(editedTransaction);
+
+            // Refresh the transactions list
+            updateTransactionsList();
+        });
+
+        // Show the dialog
+        dialog.show(getSupportFragmentManager(), "edit_transaction");
+    }
+
+
 
     private void setupViewModel() {
         viewModel = new ViewModelProvider(this).get(TransactionViewModel.class);
@@ -327,10 +353,13 @@ public class MainActivity extends AppCompatActivity {
         double totalCredits = 0;
 
         for (Transaction transaction : transactions) {
-            if ("DEBIT".equals(transaction.getType())) {
-                totalDebits += transaction.getAmount();
-            } else if ("CREDIT".equals(transaction.getType())) {
-                totalCredits += transaction.getAmount();
+            // Only include transactions that are not excluded from totals
+            if (!transaction.isExcludedFromTotal()) {
+                if ("DEBIT".equals(transaction.getType())) {
+                    totalDebits += transaction.getAmount();
+                } else if ("CREDIT".equals(transaction.getType())) {
+                    totalCredits += transaction.getAmount();
+                }
             }
         }
 
@@ -498,7 +527,7 @@ public class MainActivity extends AppCompatActivity {
         );
 
         if (cursor != null) {
-            SMSReceiver receiver = new SMSReceiver();
+            EnhancedSMSReceiver receiver = new EnhancedSMSReceiver();
             int count = 0;
             while (cursor.moveToNext()) {
                 String messageBody = cursor.getString(cursor.getColumnIndex(Telephony.Sms.BODY));
@@ -507,7 +536,7 @@ public class MainActivity extends AppCompatActivity {
                 Log.d("MainActivity", "Message date: " + new Date(messageDate) + "\nContent: " + messageBody);
 
                 if (messageDate >= fromDate && messageDate <= toDate) {
-                    receiver.parseAndSaveTransaction(this, messageBody);
+                    receiver.parseAndSaveTransaction(this, messageBody, null, messageDate);
                     count++;
                 }
             }

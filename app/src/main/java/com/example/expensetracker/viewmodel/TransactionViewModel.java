@@ -12,6 +12,7 @@ public class TransactionViewModel extends AndroidViewModel {
     private TransactionRepository repository;
     private MutableLiveData<Double> budget;
     private LiveData<List<Transaction>> allTransactions;
+    private MutableLiveData<Boolean> transactionUpdated = new MutableLiveData<>(false);
 
     public TransactionViewModel(Application application) {
         super(application);
@@ -96,5 +97,40 @@ public class TransactionViewModel extends AndroidViewModel {
         repository.getTransactionsBetweenDates(startDate, endDate, callback);
     }
 
+    // New method to get a transaction by ID
+    public void getTransactionById(long transactionId, TransactionRepository.Callback<Transaction> callback) {
+        repository.getTransactionById(transactionId, callback);
+    }
+
+    // New method to update a transaction
+    public void updateTransaction(Transaction transaction) {
+        repository.updateTransaction(transaction);
+        // Notify observers that data has changed
+        transactionUpdated.setValue(!transactionUpdated.getValue());
+    }
+
+    // New method to update a transaction's category
+    public void updateTransactionCategory(long transactionId, String category) {
+        repository.updateTransactionCategory(transactionId, category);
+        // Notify observers that data has changed
+        transactionUpdated.setValue(!transactionUpdated.getValue());
+    }
+
+    // New method to update a transaction's excluded status
+    public void updateTransactionExcludedStatus(long transactionId, boolean isExcluded) {
+        repository.updateTransactionExcludedStatus(transactionId, isExcluded);
+        // Notify observers that data has changed
+        transactionUpdated.setValue(!transactionUpdated.getValue());
+    }
+
+    // New method to get available categories
+    public String[] getAvailableCategories() {
+        return Transaction.Categories.getAllCategories();
+    }
+
+    // Get notification when transactions are updated
+    public LiveData<Boolean> getTransactionUpdatedNotifier() {
+        return transactionUpdated;
+    }
 
 }

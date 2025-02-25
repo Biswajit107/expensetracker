@@ -8,4 +8,14 @@
     <string name="all_types">All Types</string>
     <string name="spending_alert">Spending Alert</string>
     <string name="spending_warning">Warning: You have spent %.1f%% of your monthly budget!</string>
+
+    <string name="edit_transaction">Edit Transaction</string>
+    <string name="transaction_description">Description</string>
+    <string name="transaction_category">Category</string>
+    <string name="exclude_from_totals">Exclude from Totals</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="transaction_updated">Transaction updated</string>
+    <string name="select_category">Select Category</string>
+
 </resources>

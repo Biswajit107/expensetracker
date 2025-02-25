@@ -18,6 +18,17 @@ import java.util.Locale;
 
 public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.TransactionViewHolder> {
     private List<Transaction> transactions = new ArrayList<>();
+    private OnTransactionClickListener listener;
+
+    // Interface for click handling
+    public interface OnTransactionClickListener {
+        void onTransactionClick(Transaction transaction);
+    }
+
+    // Set click listener
+    public void setOnTransactionClickListener(OnTransactionClickListener listener) {
+        this.listener = listener;
+    }
 
     @NonNull
     @Override
@@ -49,6 +60,7 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
         private Chip typeChip;
         private TextView amountText;
         private TextView descriptionText;
+        private TextView categoryIndicator;
 
         public TransactionViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -57,6 +69,15 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
             typeChip = itemView.findViewById(R.id.typeChip);
             amountText = itemView.findViewById(R.id.amountText);
             descriptionText = itemView.findViewById(R.id.descriptionText);
+            categoryIndicator = itemView.findViewById(R.id.categoryIndicator);
+
+            // Set click listener
+            itemView.setOnClickListener(v -> {
+                int position = getAdapterPosition();
+                if (position != RecyclerView.NO_POSITION && listener != null) {
+                    listener.onTransactionClick(transactions.get(position));
+                }
+            });
         }
 
         void bind(Transaction transaction) {
@@ -75,8 +96,56 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
                 amountText.setTextColor(ContextCompat.getColor(itemView.getContext(), R.color.red));
             }
 
+            // Strikethrough text if excluded from totals
+            if (transaction.isExcludedFromTotal()) {
+                amountText.setPaintFlags(amountText.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
+                // Add italics to indicate excluded status
+                amountText.setTextColor(ContextCompat.getColor(itemView.getContext(), R.color.text_secondary));
+            } else {
+                amountText.setPaintFlags(amountText.getPaintFlags() & (~android.graphics.Paint.STRIKE_THRU_TEXT_FLAG));
+                // Set color based on transaction type
+                if ("CREDIT".equals(transaction.getType())) {
+                    amountText.setTextColor(ContextCompat.getColor(itemView.getContext(), R.color.green));
+                } else {
+                    amountText.setTextColor(ContextCompat.getColor(itemView.getContext(), R.color.red));
+                }
+            }
+
             amountText.setText(String.format(Locale.getDefault(), "₹%.2f", transaction.getAmount()));
+
+            // Set description
             descriptionText.setText(transaction.getDescription());
+
+            // Display category indicator if available
+            if (transaction.getCategory() != null && !transaction.getCategory().isEmpty()) {
+                categoryIndicator.setVisibility(View.VISIBLE);
+                categoryIndicator.setText(transaction.getCategory());
+
+                // Set category indicator color based on category
+                int categoryColor;
+                switch (transaction.getCategory()) {
+                    case Transaction.Categories.FOOD:
+                        categoryColor = ContextCompat.getColor(itemView.getContext(), R.color.green);
+                        break;
+                    case Transaction.Categories.SHOPPING:
+                        categoryColor = ContextCompat.getColor(itemView.getContext(), R.color.primary);
+                        break;
+                    case Transaction.Categories.BILLS:
+                        categoryColor = ContextCompat.getColor(itemView.getContext(), R.color.red);
+                        break;
+                    case Transaction.Categories.ENTERTAINMENT:
+                        categoryColor = ContextCompat.getColor(itemView.getContext(), R.color.secondary);
+                        break;
+                    case Transaction.Categories.TRANSPORT:
+                        categoryColor = ContextCompat.getColor(itemView.getContext(), R.color.yellow);
+                        break;
+                    default:
+                        categoryColor = ContextCompat.getColor(itemView.getContext(), R.color.text_secondary);
+                }
+                categoryIndicator.setTextColor(categoryColor);
+            } else {
+                categoryIndicator.setVisibility(View.GONE);
+            }
         }
     }
 }

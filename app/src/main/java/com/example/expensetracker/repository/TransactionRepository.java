@@ -99,5 +99,35 @@ public class TransactionRepository {
         return transactionDao.getTransactionsBetweenDatesSync(startDate, endDate);
     }
 
+    // New method to get a transaction by ID
+    public void getTransactionById(long transactionId, final Callback<Transaction> callback) {
+        executorService.execute(() -> {
+            Transaction transaction = transactionDao.getTransactionById(transactionId);
+            new Handler(Looper.getMainLooper()).post(() -> {
+                callback.onResult(transaction);
+            });
+        });
+    }
+
+    // New method to update a transaction
+    public void updateTransaction(Transaction transaction) {
+        executorService.execute(() -> {
+            transactionDao.update(transaction);
+        });
+    }
+
+    // New method to update a transaction's category
+    public void updateTransactionCategory(long transactionId, String category) {
+        executorService.execute(() -> {
+            transactionDao.updateCategory(transactionId, category);
+        });
+    }
+
+    // New method to update a transaction's excluded status
+    public void updateTransactionExcludedStatus(long transactionId, boolean isExcluded) {
+        executorService.execute(() -> {
+            transactionDao.updateExcludedStatus(transactionId, isExcluded);
+        });
+    }
 
 }

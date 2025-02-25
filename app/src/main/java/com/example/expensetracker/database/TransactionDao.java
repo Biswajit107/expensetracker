@@ -23,6 +23,19 @@ public interface TransactionDao {
     @Delete
     void delete(Transaction transaction);
 
+    // New method to update a transaction's category
+    @Query("UPDATE transactions SET category = :category WHERE id = :transactionId")
+    void updateCategory(long transactionId, String category);
+
+    // New method to update a transaction's excluded status
+    @Query("UPDATE transactions SET is_excluded_from_total = :isExcluded WHERE id = :transactionId")
+    void updateExcludedStatus(long transactionId, boolean isExcluded);
+
+    // New method to get a transaction by ID
+    @Query("SELECT * FROM transactions WHERE id = :transactionId LIMIT 1")
+    Transaction getTransactionById(long transactionId);
+
+
     // Fetch all transactions
     @Query("SELECT * FROM transactions ORDER BY date DESC")
     LiveData<List<Transaction>> getAllTransactions();

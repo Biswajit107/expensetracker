@@ -115,6 +115,7 @@ public class AnalyticsActivity extends AppCompatActivity {
         bottomNav.setOnItemSelectedListener(item -> {
             switch (item.getItemId()) {
                 case R.id.nav_home:
+                    startActivity(new android.content.Intent(this, MainActivity.class));
                     finish();
                     return true;
                 case R.id.nav_analytics:
