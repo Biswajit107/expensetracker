@@ -10,7 +10,6 @@ import android.util.Log;
 import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.database.TransactionDatabase;
 import com.example.expensetracker.models.Transaction;
-import com.example.expensetracker.nlp.NLPTransactionProcessor;
 import com.example.expensetracker.parser.TransactionParser;
 import com.example.expensetracker.utils.PreferencesManager;
 
@@ -22,8 +21,6 @@ public class EnhancedSMSReceiver extends BroadcastReceiver {
     private static final String TAG = "EnhancedSMSReceiver";
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
-    // Create instance of NLP processor
-    private final NLPTransactionProcessor nlpProcessor = new NLPTransactionProcessor();
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -61,7 +58,7 @@ public class EnhancedSMSReceiver extends BroadcastReceiver {
                 TransactionDao dao = TransactionDatabase.getInstance(context).transactionDao();
 
                 // 3. Check if this is a duplicate
-                if (nlpProcessor.isDuplicate(transaction, dao)) {
+                if (parser.isDuplicate(transaction, dao)) {
                     Log.d(TAG, "Duplicate transaction detected, skipping: " + transaction.getDescription());
                     return;
                 }
@@ -71,8 +68,8 @@ public class EnhancedSMSReceiver extends BroadcastReceiver {
                 Log.d(TAG, "Successfully saved transaction: " + transaction.getDescription() +
                         ", amount: " + transaction.getAmount());
 
-                // 5. Periodically clean up the cache
-                nlpProcessor.cleanupCache(System.currentTimeMillis());
+//                // 5. Periodically clean up the cache
+//                parser.cleanupCache(System.currentTimeMillis());
 
                 // 6. Update last sync time
                 new PreferencesManager(context).setLastSyncTime(System.currentTimeMillis());
