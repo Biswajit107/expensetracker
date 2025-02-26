@@ -11,6 +11,7 @@ import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.database.TransactionDatabase;
 import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.nlp.NLPTransactionProcessor;
+import com.example.expensetracker.parser.TransactionParser;
 import com.example.expensetracker.utils.PreferencesManager;
 
 import java.util.Date;
@@ -48,7 +49,8 @@ public class EnhancedSMSReceiver extends BroadcastReceiver {
         executorService.execute(() -> {
             try {
                 // 1. Use NLP processor to parse the message
-                Transaction transaction = nlpProcessor.parseTransaction(message, sender, timestamp);
+                TransactionParser parser = new TransactionParser();
+                Transaction transaction = parser.parseTransaction(message, sender, timestamp);
 
                 if (transaction == null) {
                     Log.d(TAG, "Message could not be parsed as a transaction: " + message);
