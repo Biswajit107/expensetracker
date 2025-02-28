@@ -10,17 +10,27 @@ import android.util.Log;
 import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.database.TransactionDatabase;
 import com.example.expensetracker.models.Transaction;
-import com.example.expensetracker.parser.TransactionParser;
+import com.example.expensetracker.parser.EnhancedTransactionParser;
 import com.example.expensetracker.utils.PreferencesManager;
 
 import java.util.Date;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * Enhanced SMS Receiver that uses the new EnhancedTransactionParser
+ * for better detection of bank transaction messages
+ */
 public class EnhancedSMSReceiver extends BroadcastReceiver {
     private static final String TAG = "EnhancedSMSReceiver";
-    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private final ExecutorService executorService;
+    private final EnhancedTransactionParser parser;
 
+    public EnhancedSMSReceiver() {
+        executorService = Executors.newSingleThreadExecutor();
+        parser = new EnhancedTransactionParser();
+    }
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -42,36 +52,41 @@ public class EnhancedSMSReceiver extends BroadcastReceiver {
         }
     }
 
+    /**
+     * Parse and save a transaction from an SMS message
+     */
     public void parseAndSaveTransaction(Context context, String message, String sender, long timestamp) {
         executorService.execute(() -> {
             try {
-                // 1. Use NLP processor to parse the message
-                TransactionParser parser = new TransactionParser();
+                // Step 1: Use the enhanced parser to parse the message
                 Transaction transaction = parser.parseTransaction(message, sender, timestamp);
 
+                // Step 2: If parsing failed, try fallback method for problematic messages
                 if (transaction == null) {
-                    Log.d(TAG, "Message could not be parsed as a transaction: " + message);
-                    return;
+                    Log.d(TAG, "Primary parsing failed, attempting fallback parsing");
+                    transaction = parser.attemptFallbackParsing(message, sender, timestamp);
+
+                    if (transaction == null) {
+                        Log.d(TAG, "Fallback parsing also failed, skipping message");
+                        return;
+                    }
                 }
 
-                // 2. Get the DAO for duplicate checking
+                // Step 3: Get the DAO for duplicate checking
                 TransactionDao dao = TransactionDatabase.getInstance(context).transactionDao();
 
-                // 3. Check if this is a duplicate
+                // Step 4: Check if this is a duplicate
                 if (parser.isDuplicate(transaction, dao)) {
                     Log.d(TAG, "Duplicate transaction detected, skipping: " + transaction.getDescription());
                     return;
                 }
 
-                // 4. Save the valid, non-duplicate transaction
+                // Step 5: Save the valid, non-duplicate transaction
                 saveTransaction(context, transaction);
                 Log.d(TAG, "Successfully saved transaction: " + transaction.getDescription() +
                         ", amount: " + transaction.getAmount());
 
-//                // 5. Periodically clean up the cache
-//                parser.cleanupCache(System.currentTimeMillis());
-
-                // 6. Update last sync time
+                // Step 6: Update last sync time
                 new PreferencesManager(context).setLastSyncTime(System.currentTimeMillis());
             } catch (Exception e) {
                 Log.e(TAG, "Error processing transaction", e);
@@ -80,40 +95,41 @@ public class EnhancedSMSReceiver extends BroadcastReceiver {
     }
 
     /**
+     * Parse and save a transaction from an SMS message (overloaded method)
+     */
+    public void parseAndSaveTransaction(Context context, String message, long messageDate) {
+        parseAndSaveTransaction(context, message, null, messageDate);
+    }
+
+    /**
      * Save a transaction to the database
-     * @param context Application context
-     * @param transaction The transaction to save
      */
     private void saveTransaction(Context context, Transaction transaction) {
-        Log.d(TAG, "Saving transaction: " + transaction.getAmount() +
-                " - " + transaction.getDescription());
-
         try {
             TransactionDao dao = TransactionDatabase.getInstance(context).transactionDao();
             dao.insert(transaction);
+            Log.d(TAG, "Transaction saved to database: " + transaction.getDescription());
         } catch (Exception e) {
             Log.e(TAG, "Error saving transaction to database", e);
         }
     }
 
     /**
-     * Check if a message has already been processed
-     * @param context Application context
-     * @param messageHash The hash of the message
-     * @return true if the message has been processed
+     * For bulk processing of messages
      */
-    private boolean isMessageProcessed(Context context, String messageHash) {
-        try {
-            TransactionDao dao = TransactionDatabase.getInstance(context).transactionDao();
-            return dao.hasTransaction(messageHash);
-        } catch (Exception e) {
-            Log.e(TAG, "Error checking message hash", e);
-            return false;
+    public void processBulkMessages(Context context, List<SmsMessage> messages) {
+        for (SmsMessage message : messages) {
+            parseAndSaveTransaction(
+                    context,
+                    message.getMessageBody(),
+                    message.getDisplayOriginatingAddress(),
+                    message.getTimestampMillis()
+            );
         }
     }
 
     /**
-     * Clean up resources when this receiver is no longer needed
+     * Clean up resources when the receiver is no longer needed
      */
     public void cleanup() {
         if (executorService != null && !executorService.isShutdown()) {
