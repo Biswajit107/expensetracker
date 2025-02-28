@@ -41,6 +41,10 @@
 
     <color name="chip_background">@color/background_light</color>
 
+    <color name="background_light_grey">#F5F5F5</color>
+    <color name="warning_yellow">#FFC107</color>
+    <color name="info_blue">#E3F2FD</color>
+
     <!-- Chart colors -->
     <array name="chart_colors">
         <item>@color/primary</item>

@@ -130,4 +130,38 @@ public class TransactionRepository {
         });
     }
 
+    /**
+     * Get the count of auto-excluded transactions from OTHER banks
+     * @return Count of auto-excluded transactions
+     */
+    public int getAutoExcludedTransactionCountSync() {
+        return transactionDao.getAutoExcludedTransactionCount();
+    }
+
+    /**
+     * Get all auto-excluded transactions
+     * @param callback Callback with the list of transactions
+     */
+    public void getAutoExcludedTransactions(final Callback<List<Transaction>> callback) {
+        executorService.execute(() -> {
+            List<Transaction> transactions = transactionDao.getAutoExcludedTransactionsSync();
+            new Handler(Looper.getMainLooper()).post(() -> {
+                callback.onResult(transactions);
+            });
+        });
+    }
+
+    /**
+     * Include all auto-excluded transactions
+     * @param callback Callback with count of updated transactions
+     */
+    public void includeAllAutoExcludedTransactions(final Callback<Integer> callback) {
+        executorService.execute(() -> {
+            int count = transactionDao.includeAllAutoExcludedTransactions();
+            new Handler(Looper.getMainLooper()).post(() -> {
+                callback.onResult(count);
+            });
+        });
+    }
+
 }

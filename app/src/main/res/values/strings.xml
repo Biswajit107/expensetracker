@@ -18,4 +18,14 @@
     <string name="transaction_updated">Transaction updated</string>
     <string name="select_category">Select Category</string>
 
+    <string name="auto_excluded_title">Auto-Excluded Transactions</string>
+    <string name="auto_excluded_message">%d transaction(s) from unrecognized sources have been automatically excluded. These might be promotional messages or non-transaction SMS incorrectly detected as transactions.</string>
+    <string name="auto_excluded_info">Auto-excluded transactions appear with a gray background and strikethrough amount. You can tap any transaction to edit and include it.</string>
+    <string name="review_transactions">Review Transactions</string>
+    <string name="include_all">Include All</string>
+    <string name="transactions_included">%d transaction(s) have been included</string>
+    <string name="showing_auto_excluded">Showing auto-excluded transactions only</string>
+    <string name="auto_excluded_hint">Auto-excluded (unknown source)</string>
+    <string name="excluded_hint">Excluded from totals</string>
+
 </resources>

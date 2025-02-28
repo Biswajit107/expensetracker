@@ -1,6 +1,9 @@
 package com.example.expensetracker.viewmodel;
 
 import android.app.Application;
+import android.content.Context;
+import android.widget.Toast;
+
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
@@ -133,4 +136,48 @@ public class TransactionViewModel extends AndroidViewModel {
         return transactionUpdated;
     }
 
+    /**
+     * Add these methods to TransactionViewModel.java
+     */
+
+    /**
+     * Toggle excluded status for a specific transaction
+     * @param transactionId The ID of the transaction
+     * @param excluded New excluded status (true or false)
+     */
+    public void toggleExcludedStatus(long transactionId, boolean excluded) {
+        repository.updateTransactionExcludedStatus(transactionId, excluded);
+
+        // Refresh data
+        refreshTransactions();
+
+        // Notify observers of change
+        transactionUpdated.setValue(!transactionUpdated.getValue());
+    }
+
+    /**
+     * Get count of auto-excluded "OTHER" bank transactions
+     * @param callback Callback with the count
+     */
+    public void getAutoExcludedCount(TransactionRepository.Callback<Integer> callback) {
+        executorService.execute(() -> {
+            int count = repository.getAutoExcludedTransactionCountSync();
+            callback.onResult(count);
+        });
+    }
+
+    /**
+     * Show notification for auto-excluded transactions if there are any
+     * @param context The activity context
+     */
+    public void notifyAboutAutoExcludedTransactions(Context context) {
+        getAutoExcludedCount(count -> {
+            if (count > 0) {
+                // Show notification or toast
+                Toast.makeText(context,
+                        count + " transaction(s) from unrecognized sources have been auto-excluded",
+                        Toast.LENGTH_LONG).show();
+            }
+        });
+    }
 }

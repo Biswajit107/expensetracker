@@ -52,9 +52,7 @@ public class EnhancedSMSReceiver extends BroadcastReceiver {
         }
     }
 
-    /**
-     * Parse and save a transaction from an SMS message
-     */
+    // Inside parseAndSaveTransaction method in EnhancedSMSReceiver.java
     public void parseAndSaveTransaction(Context context, String message, String sender, long timestamp) {
         executorService.execute(() -> {
             try {
@@ -81,10 +79,18 @@ public class EnhancedSMSReceiver extends BroadcastReceiver {
                     return;
                 }
 
-                // Step 5: Save the valid, non-duplicate transaction
+                // NEW CODE: Auto-exclude transactions from unknown banks
+                if ("OTHER".equals(transaction.getBank())) {
+                    transaction.setExcludedFromTotal(true);
+                    transaction.setOtherDebit(true); // Mark as "other" transaction for UI distinction
+                    Log.d(TAG, "Auto-excluded transaction from unknown bank: " + transaction.getDescription());
+                }
+
+                // Step 5: Save the transaction
                 saveTransaction(context, transaction);
                 Log.d(TAG, "Successfully saved transaction: " + transaction.getDescription() +
-                        ", amount: " + transaction.getAmount());
+                        ", amount: " + transaction.getAmount() +
+                        (transaction.isExcludedFromTotal() ? " (excluded)" : ""));
 
                 // Step 6: Update last sync time
                 new PreferencesManager(context).setLastSyncTime(System.currentTimeMillis());

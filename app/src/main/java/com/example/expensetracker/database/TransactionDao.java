@@ -191,4 +191,35 @@ public interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE amount BETWEEN :minAmount AND :maxAmount ORDER BY date DESC")
     List<Transaction> getTransactionsByAmountRange(double minAmount, double maxAmount);
 
+    /**
+     * Get count of auto-excluded transactions from OTHER banks
+     */
+    @Query("SELECT COUNT(*) FROM transactions WHERE bank = 'OTHER' AND is_excluded_from_total = 1 AND is_other_debit = 1")
+    int getAutoExcludedTransactionCount();
+
+    /**
+     * Get all auto-excluded transactions from OTHER banks
+     */
+    @Query("SELECT * FROM transactions WHERE bank = 'OTHER' AND is_excluded_from_total = 1 AND is_other_debit = 1 ORDER BY date DESC")
+    List<Transaction> getAutoExcludedTransactionsSync();
+
+    /**
+     * Include all auto-excluded transactions (set excluded status to false)
+     * Returns the number of transactions updated
+     */
+    @Query("UPDATE transactions SET is_excluded_from_total = 0 WHERE bank = 'OTHER' AND is_excluded_from_total = 1 AND is_other_debit = 1")
+    int includeAllAutoExcludedTransactions();
+
+    /**
+     * Get transactions from OTHER banks
+     */
+    @Query("SELECT * FROM transactions WHERE bank = 'OTHER' ORDER BY date DESC")
+    List<Transaction> getOtherBankTransactionsSync();
+
+    /**
+     * Get OTHER bank transactions between dates
+     */
+    @Query("SELECT * FROM transactions WHERE bank = 'OTHER' AND date BETWEEN :startDate AND :endDate ORDER BY date DESC")
+    List<Transaction> getOtherBankTransactionsBetweenDatesSync(long startDate, long endDate);
+
 }

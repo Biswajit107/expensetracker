@@ -1,5 +1,6 @@
 package com.example.expensetracker.adapters;
 
+import android.graphics.Typeface;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -61,6 +62,8 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
         private TextView amountText;
         private TextView descriptionText;
         private TextView categoryIndicator;
+        private TextView otherBankIndicator;
+        private TextView excludedHintText;
 
         public TransactionViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -70,6 +73,10 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
             amountText = itemView.findViewById(R.id.amountText);
             descriptionText = itemView.findViewById(R.id.descriptionText);
             categoryIndicator = itemView.findViewById(R.id.categoryIndicator);
+
+            // Add these new fields to the ViewHolder class
+            otherBankIndicator = itemView.findViewById(R.id.otherBankIndicator);
+            excludedHintText = itemView.findViewById(R.id.excludedHintText);
 
             // Set click listener
             itemView.setOnClickListener(v -> {
@@ -96,13 +103,70 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
                 amountText.setTextColor(ContextCompat.getColor(itemView.getContext(), R.color.red));
             }
 
-            // Strikethrough text if excluded from totals
+            // Special handling for excluded transactions
             if (transaction.isExcludedFromTotal()) {
+                // Add strikethrough
                 amountText.setPaintFlags(amountText.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
-                // Add italics to indicate excluded status
+
+                // Change text color to indicate excluded status
                 amountText.setTextColor(ContextCompat.getColor(itemView.getContext(), R.color.text_secondary));
+
+                // If it's from an unrecognized bank (OTHER), apply additional styling
+                if ("OTHER".equals(transaction.getBank()) || transaction.isOtherDebit()) {
+                    // Apply a background tint to the entire item to make it distinct
+                    itemView.setBackgroundColor(ContextCompat.getColor(itemView.getContext(), R.color.background_light_grey));
+
+                    // Add an indicator icon or text
+                    if (otherBankIndicator != null) {
+                        otherBankIndicator.setVisibility(View.VISIBLE);
+                    }
+
+                    // Add italic style to description
+                    descriptionText.setTypeface(descriptionText.getTypeface(), Typeface.ITALIC);
+
+                    // Add a hint about excluded status
+                    if (excludedHintText != null) {
+                        excludedHintText.setVisibility(View.VISIBLE);
+                        excludedHintText.setText("Auto-excluded (unknown source)");
+                    }
+                } else {
+                    // Reset background for regular excluded transactions
+                    itemView.setBackgroundColor(ContextCompat.getColor(itemView.getContext(), R.color.white));
+
+                    // Hide the indicators for regular transactions
+                    if (otherBankIndicator != null) {
+                        otherBankIndicator.setVisibility(View.GONE);
+                    }
+
+                    // Reset text style
+                    descriptionText.setTypeface(descriptionText.getTypeface(), Typeface.NORMAL);
+
+                    // Update excluded hint
+                    if (excludedHintText != null) {
+                        excludedHintText.setVisibility(View.VISIBLE);
+                        excludedHintText.setText("Excluded from totals");
+                    }
+                }
             } else {
+                // Remove strikethrough for non-excluded transactions
                 amountText.setPaintFlags(amountText.getPaintFlags() & (~android.graphics.Paint.STRIKE_THRU_TEXT_FLAG));
+
+                // Reset background
+                itemView.setBackgroundColor(ContextCompat.getColor(itemView.getContext(), R.color.white));
+
+                // Hide indicators
+                if (otherBankIndicator != null) {
+                    otherBankIndicator.setVisibility(View.GONE);
+                }
+
+                // Hide excluded hint
+                if (excludedHintText != null) {
+                    excludedHintText.setVisibility(View.GONE);
+                }
+
+                // Reset text style
+                descriptionText.setTypeface(descriptionText.getTypeface(), Typeface.NORMAL);
+
                 // Set color based on transaction type
                 if ("CREDIT".equals(transaction.getType())) {
                     amountText.setTextColor(ContextCompat.getColor(itemView.getContext(), R.color.green));

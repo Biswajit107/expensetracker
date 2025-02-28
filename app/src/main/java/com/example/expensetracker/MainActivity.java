@@ -22,6 +22,7 @@ import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -29,10 +30,12 @@ import android.widget.Toast;
 
 import com.example.expensetracker.adapters.TransactionAdapter;
 import com.example.expensetracker.database.TransactionDatabase;
+import com.example.expensetracker.dialogs.AutoExcludedTransactionsDialog;
 import com.example.expensetracker.dialogs.TransactionEditDialog;
 import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.receivers.EnhancedSMSReceiver;
 import com.example.expensetracker.receivers.SMSReceiver;
+import com.example.expensetracker.repository.TransactionRepository;
 import com.example.expensetracker.viewmodel.TransactionViewModel;
 import com.example.expensetracker.utils.PreferencesManager;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
@@ -64,6 +67,11 @@ public class MainActivity extends AppCompatActivity {
     private MaterialCardView alertCard;
     private TextView alertText;
 
+    private View filterIndicatorContainer;
+    private TextView filterIndicator;
+    private Button clearFilterButton;
+    private TextView resultCount;
+
     private long fromDate = 0;
     private long toDate = 0;
     private PreferencesManager preferencesManager;
@@ -87,6 +95,8 @@ public class MainActivity extends AppCompatActivity {
         setupDefaultDates();
         checkAndRequestSMSPermissions();
         setupBottomNavigation();
+
+        checkAutoExcludedTransactions();
     }
 
     private void setupDefaultDates() {
@@ -122,6 +132,11 @@ public class MainActivity extends AppCompatActivity {
         alertCard = findViewById(R.id.alertCard);
         alertText = findViewById(R.id.alertText);
 
+        filterIndicatorContainer = findViewById(R.id.filterIndicatorContainer);
+        filterIndicator = findViewById(R.id.filterIndicator);
+        clearFilterButton = findViewById(R.id.clearFilterButton);
+        resultCount = findViewById(R.id.resultCount);
+
         // Rest of the method remains the same
         budgetInput.addTextChangedListener(new TextWatcher() {
             @Override
@@ -144,6 +159,23 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
+
+        // Set default filter indicator visibility
+        if (filterIndicatorContainer != null) {
+            filterIndicatorContainer.setVisibility(View.GONE);
+        }
+
+        // Setup clear filter button
+        if (clearFilterButton != null) {
+            clearFilterButton.setOnClickListener(v -> {
+                // Reset and show all transactions
+                updateTransactionsList();
+
+                // Hide filter UI
+                filterIndicatorContainer.setVisibility(View.GONE);
+            });
+        }
+
     }
 
     private void setupSpinners() {
@@ -587,5 +619,92 @@ public class MainActivity extends AppCompatActivity {
         if (executorService != null) {
             executorService.shutdown();
         }
+    }
+
+    /**
+     * Add this method to MainActivity.java
+     */
+    private void checkAutoExcludedTransactions() {
+        viewModel.getAutoExcludedCount(count -> {
+            if (count > 0) {
+                // Show dialog
+                AutoExcludedTransactionsDialog dialog = new AutoExcludedTransactionsDialog(count);
+                dialog.setListener(new AutoExcludedTransactionsDialog.OnActionSelectedListener() {
+                    @Override
+                    public void onIncludeAllSelected() {
+                        // Include all auto-excluded transactions
+                        includeAllAutoExcludedTransactions();
+                    }
+
+                    @Override
+                    public void onReviewSelected() {
+                        // Navigate to a screen showing only auto-excluded transactions
+                        // This could be a new activity or a filtered view
+                        showAutoExcludedTransactions();
+                    }
+                });
+                dialog.show(getSupportFragmentManager(), "auto_excluded_dialog");
+            }
+        });
+    }
+
+    /**
+     * Include all auto-excluded transactions
+     */
+    private void includeAllAutoExcludedTransactions() {
+        TransactionRepository repository = new TransactionRepository(getApplication());
+        repository.includeAllAutoExcludedTransactions(count -> {
+            if (count > 0) {
+                Toast.makeText(this, count + " transaction(s) have been included", Toast.LENGTH_SHORT).show();
+                // Refresh the transaction list
+                updateTransactionsList();
+            }
+        });
+    }
+
+    /**
+     * Show only auto-excluded transactions
+     * This is a simple implementation that filters the current view
+     * A more complete implementation would create a separate screen
+     */
+    private void showAutoExcludedTransactions() {
+        // Update UI to show we're in "filtering mode"
+        TextView filterIndicator = findViewById(R.id.filterIndicator);
+        if (filterIndicator != null) {
+            filterIndicator.setVisibility(View.VISIBLE);
+            filterIndicator.setText("Showing auto-excluded transactions only");
+        }
+
+        // Reset other filters
+        bankSpinner.setText("All Banks", false);
+        typeSpinner.setText("All Types", false);
+
+        // Get and display auto-excluded transactions
+        TransactionRepository repository = new TransactionRepository(getApplication());
+        repository.getAutoExcludedTransactions(transactions -> {
+            adapter.setTransactions(transactions);
+
+            // Update count text
+            TextView resultCount = findViewById(R.id.resultCount);
+            if (resultCount != null) {
+                resultCount.setVisibility(View.VISIBLE);
+                resultCount.setText(transactions.size() + " auto-excluded transaction(s)");
+            }
+
+            // Add a "clear filter" button
+            Button clearFilterButton = findViewById(R.id.clearFilterButton);
+            if (clearFilterButton != null) {
+                clearFilterButton.setVisibility(View.VISIBLE);
+                clearFilterButton.setOnClickListener(v -> {
+                    // Reset and show all transactions
+                    updateTransactionsList();
+
+                    // Hide filter UI
+                    filterIndicator.setVisibility(View.GONE);
+                    resultCount.setVisibility(View.GONE);
+                    clearFilterButton.setVisibility(View.GONE);
+                });
+            }
+        });
     }
 }
