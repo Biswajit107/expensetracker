@@ -2,318 +2,259 @@ package com.example.expensetracker.nlp;
 
 import android.util.Log;
 import android.util.Base64;
+
 import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.models.Transaction;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public class NLPTransactionProcessor {
     private static final String TAG = "NLPTransactionProcessor";
 
+    // Comprehensive keyword sets
+    private static final Set<String> TRANSACTION_KEYWORDS = new HashSet<>(Arrays.asList(
+            // Debit keywords
+            "debited", "debit", "paid", "spent", "withdrawn",
+            "payment", "purchase", "transaction", "charged",
+            "transferred", "txn", "deducted",
+
+            // Credit keywords
+            "credited", "credit", "received", "refund",
+            "cashback", "deposit", "added", "incoming"
+    ));
+
+    private static final Set<String> BANK_KEYWORDS = new HashSet<>(Arrays.asList(
+            "hdfc", "sbi", "icici", "axis", "kotak", "bob",
+            "pnb", "canara", "indian bank", "yes bank"
+    ));
+
+    private static final Set<String> EXCLUSION_KEYWORDS = new HashSet<>(Arrays.asList(
+            "balance", "available", "stmt", "statement",
+            "otp", "password", "verification", "login",
+            "due", "reminder", "upcoming", "scheduled",
+            "expiry", "limit"
+    ));
+
+    // Amount detection pattern
+    private static final Pattern AMOUNT_PATTERN = Pattern.compile(
+            "(?:₹|Rs\\.?|INR)\\s*([0-9,]+(?:\\.\\d{1,2})?)",
+            Pattern.CASE_INSENSITIVE
+    );
+
     private final TransactionLexicalAnalyzer lexicalAnalyzer;
     private final SemanticSimilarityDetector similarityDetector;
     private final TransactionSentimentAnalyzer sentimentAnalyzer;
-    private final BankPatternDatabase bankPatternDatabase;
     private final TransactionCache transactionCache;
-
-    // General patterns for non-transaction messages
-    private final List<Pattern> nonTransactionPatterns = new ArrayList<>();
 
     public NLPTransactionProcessor() {
         this.lexicalAnalyzer = new TransactionLexicalAnalyzer();
         this.similarityDetector = new SemanticSimilarityDetector();
         this.sentimentAnalyzer = new TransactionSentimentAnalyzer();
-        this.bankPatternDatabase = new BankPatternDatabase();
         this.transactionCache = new TransactionCache();
-
-        initializeNonTransactionPatterns();
     }
 
-    private void initializeNonTransactionPatterns() {
-        // Patterns for non-transaction messages
-        nonTransactionPatterns.add(Pattern.compile("balance|avl bal|available balance", Pattern.CASE_INSENSITIVE));
-        nonTransactionPatterns.add(Pattern.compile("otp|password|verification code|secure code", Pattern.CASE_INSENSITIVE));
-        nonTransactionPatterns.add(Pattern.compile("will be|upcoming|due for|reminder|alert", Pattern.CASE_INSENSITIVE));
-        nonTransactionPatterns.add(Pattern.compile("offer|discount|cashback", Pattern.CASE_INSENSITIVE));
-    }
-
+    /**
+     * Comprehensive transaction message detection
+     * @param message SMS message content
+     * @param sender SMS sender
+     * @return boolean indicating if it's a transaction
+     */
     public boolean isTransactionMessage(String message, String sender) {
         String lowerMessage = message.toLowerCase();
 
-        // 1. EXPLICITLY FILTER OUT COMMON NON-TRANSACTION MESSAGES
-
-        // Balance enquiry/statement messages
-        if ((lowerMessage.contains("balance") || lowerMessage.contains("stmt") || lowerMessage.contains("statement")) &&
-                !lowerMessage.contains("debited") && !lowerMessage.contains("credited") &&
-                !lowerMessage.contains("transferred") && !lowerMessage.contains("payment")) {
-            Log.d(TAG, "Rejected: Balance enquiry message");
+        // Quick exclusion checks
+        if (hasExclusionKeywords(lowerMessage)) {
+            Log.d(TAG, "Excluded by keywords: " + message);
             return false;
         }
 
-        // OTP/verification messages
-        if (lowerMessage.contains("otp") || lowerMessage.contains("password") ||
-                lowerMessage.contains("verification code") || lowerMessage.contains("login")) {
-            Log.d(TAG, "Rejected: OTP/verification message");
+        // Check for amount
+        if (!hasValidAmount(lowerMessage)) {
+            Log.d(TAG, "No valid amount found: " + message);
             return false;
         }
 
-        // Future/scheduled transactions
-        if ((lowerMessage.contains("will be") || lowerMessage.contains("scheduled") ||
-                lowerMessage.contains("upcoming") || lowerMessage.contains("reminder")) &&
-                !lowerMessage.contains("has been") && !lowerMessage.contains("was")) {
-            Log.d(TAG, "Rejected: Future/scheduled transaction message");
-            return false;
-        }
+        // Count transaction keywords
+        int transactionKeywordCount = countTransactionKeywords(lowerMessage);
 
-        // Card statements, due dates, etc.
-        if (lowerMessage.contains("due date") || lowerMessage.contains("min amount due") ||
-                (lowerMessage.contains("statement") && lowerMessage.contains("generated"))) {
-            Log.d(TAG, "Rejected: Statement/due date message");
-            return false;
-        }
+        // Sentiment-based validation
+        TransactionType inferredType = sentimentAnalyzer.analyzeTransactionSentiment(message);
 
-        // 2. REQUIRE SPECIFIC TRANSACTION INDICATORS
+        // Lexical analysis validation
+        TransactionType lexicalType = lexicalAnalyzer.classifyTransactionType(message);
 
-        // Must have a currency indicator with amount
-        boolean hasAmount = Pattern.compile("(?:rs\\.?|inr|₹)\\s*[0-9,]+\\.?[0-9]*").matcher(lowerMessage).find();
-        if (!hasAmount) {
-            Log.d(TAG, "Rejected: No amount found");
-            return false;
-        }
+        // Scoring mechanism
+        boolean isTransaction = transactionKeywordCount > 0 &&
+                inferredType != TransactionType.UNKNOWN &&
+                lexicalType != null;
 
-        // Must have clear transaction verbs/indicators
-        boolean hasTransactionVerb =
-                lowerMessage.contains("debited") ||
-                        lowerMessage.contains("credited") ||
-                        lowerMessage.contains("paid") ||
-                        lowerMessage.contains("sent") ||
-                        lowerMessage.contains("received") ||
-                        lowerMessage.contains("transfer") ||
-                        lowerMessage.contains("payment") ||
-                        lowerMessage.contains("spent") ||
-                        lowerMessage.contains("purchased") ||
-                        lowerMessage.contains("transaction");
+        Log.d(TAG, "Transaction Detection - Keywords: " + transactionKeywordCount +
+                ", Sentiment Type: " + inferredType +
+                ", Lexical Type: " + lexicalType +
+                ", Is Transaction: " + isTransaction);
 
-        if (!hasTransactionVerb) {
-            Log.d(TAG, "Rejected: No transaction verb found");
-            return false;
-        }
-
-        // 3. BANK-SPECIFIC PATTERNS
-        String bank = bankPatternDatabase.identifyBank(sender, message);
-        if (!bank.equals("UNKNOWN")) {
-            // Known bank sender - additional checks based on bank patterns
-            BankPatternDatabase.BankPatterns bankPatterns = bankPatternDatabase.getPatternsForBank(bank);
-            if (bankPatterns != null && bankPatterns.hasTransactionPattern()) {
-                boolean matchesTransactionPattern = false;
-                for (Pattern pattern : bankPatterns.getTransactionPatterns()) {
-                    if (pattern.matcher(message).find()) {
-                        matchesTransactionPattern = true;
-                        break;
-                    }
-                }
-
-                if (!matchesTransactionPattern) {
-                    Log.d(TAG, "Rejected: Doesn't match bank-specific transaction pattern");
-                    return false;
-                }
-            }
-        }
-
-        // 4. CONTEXT ANALYSIS
-        boolean hasAccountReference =
-                lowerMessage.contains("a/c") ||
-                        lowerMessage.contains("account") ||
-                        lowerMessage.contains("acct");
-
-        boolean hasCompletedIndicator =
-                lowerMessage.contains("has been") ||
-                        lowerMessage.contains("was") ||
-                        lowerMessage.contains("is") ||
-                        lowerMessage.contains("done") ||
-                        lowerMessage.contains("processed") ||
-                        lowerMessage.contains("completed");
-
-        // Higher confidence if it mentions an account and indicates completion
-        if (hasAccountReference && hasCompletedIndicator) {
-            return true;
-        }
-
-        // If we have a strong transaction verb and an amount, it's likely a transaction
-        if (hasTransactionVerb && hasAmount &&
-                (lowerMessage.contains("debited") || lowerMessage.contains("credited") ||
-                        lowerMessage.contains("paid") || lowerMessage.contains("received"))) {
-            return true;
-        }
-
-        // If it matches a bank sender and has amount + transaction verb, it's likely a transaction
-        if (!bank.equals("UNKNOWN") && hasAmount && hasTransactionVerb) {
-            return true;
-        }
-
-        // Otherwise, be conservative - more likely to be a non-transaction message
-        Log.d(TAG, "Rejected: Didn't meet confidence criteria for transaction");
-        return false;
+        return isTransaction;
     }
 
-    public TransactionType determineTransactionType(String message) {
-        String lowerMessage = message.toLowerCase();
-
-        // Very clear debit indicators have highest priority
-        if (lowerMessage.contains("debited from") ||
-                lowerMessage.contains("paid from") ||
-                lowerMessage.contains("withdrawn from") ||
-                lowerMessage.contains("purchase at") ||
-                lowerMessage.contains("spent at") ||
-                lowerMessage.contains("payment made")) {
-            return TransactionType.DEBIT;
-        }
-
-        // Very clear credit indicators have highest priority
-        if (lowerMessage.contains("credited to") ||
-                lowerMessage.contains("received in") ||
-                lowerMessage.contains("deposited to") ||
-                lowerMessage.contains("payment received") ||
-                lowerMessage.contains("refund") ||
-                lowerMessage.contains("cashback")) {
-            return TransactionType.CREDIT;
-        }
-
-        // Check for transactional keywords with context
-        boolean isDebit = false;
-        boolean isCredit = false;
-
-        // Look for debit keywords with account as object
-        if ((lowerMessage.contains("debited") || lowerMessage.contains("debit")) &&
-                (lowerMessage.contains("your") || lowerMessage.contains("a/c") ||
-                        lowerMessage.contains("account"))) {
-            isDebit = true;
-        }
-
-        // Look for credit keywords with account as object
-        if ((lowerMessage.contains("credited") || lowerMessage.contains("credit")) &&
-                (lowerMessage.contains("your") || lowerMessage.contains("a/c") ||
-                        lowerMessage.contains("account"))) {
-            isCredit = true;
-        }
-
-        // Handle conflict (if both debit and credit indicators are present)
-        if (isDebit && isCredit) {
-            // Look for context clues to resolve
-            if (lowerMessage.contains("paid") || lowerMessage.contains("spent") ||
-                    lowerMessage.contains("purchase")) {
-                return TransactionType.DEBIT;
-            }
-            if (lowerMessage.contains("received") || lowerMessage.contains("income") ||
-                    lowerMessage.contains("salary")) {
-                return TransactionType.CREDIT;
-            }
-
-            // Default to the one that appears first in the message
-            int debitIndex = lowerMessage.indexOf("debit");
-            int creditIndex = lowerMessage.indexOf("credit");
-
-            if (debitIndex != -1 && creditIndex != -1) {
-                return debitIndex < creditIndex ? TransactionType.DEBIT : TransactionType.CREDIT;
-            } else if (debitIndex != -1) {
-                return TransactionType.DEBIT;
-            } else if (creditIndex != -1) {
-                return TransactionType.CREDIT;
-            }
-        } else if (isDebit) {
-            return TransactionType.DEBIT;
-        } else if (isCredit) {
-            return TransactionType.CREDIT;
-        }
-
-        // Fall back to lexical analysis
-        return lexicalAnalyzer.classifyTransactionType(message);
-    }
-
-    // The parseTransaction method would now use this improved determineTransactionType method:
+    /**
+     * Parse transaction from message
+     * @param message SMS message content
+     * @param sender SMS sender
+     * @param timestamp Message timestamp
+     * @return Parsed Transaction object
+     */
     public Transaction parseTransaction(String message, String sender, long timestamp) {
-        // 1. Check if it's a transaction message
+        // Validate as transaction first
         if (!isTransactionMessage(message, sender)) {
-            Log.d(TAG, "Not a transaction message: " + message);
+            Log.d(TAG, "Not a valid transaction message: " + message);
             return null;
         }
 
-        // 2. Identify the bank
-        String bank = bankPatternDatabase.identifyBank(sender, message);
-
-        // 3. Get appropriate bank patterns (use general if no specific bank identified)
-        BankPatternDatabase.BankPatterns patterns = bankPatternDatabase.getPatternsForBank(
-                bank.equals("UNKNOWN") ? "GENERAL" : bank);
-
-        // 3. Extract transaction amount
-        Double amount = lexicalAnalyzer.extractAmount(message, bank);
+        // Extract core transaction details
+        Double amount = extractAmount(message);
         if (amount == null) {
-            Log.d(TAG, "Could not extract amount from: " + message);
+            Log.d(TAG, "Could not extract amount: " + message);
             return null;
         }
 
-        // 4. Determine transaction type using improved method
+        // Determine transaction type
         TransactionType txnType = determineTransactionType(message);
 
-        // 5. Extract merchant name
-        String merchantName = lexicalAnalyzer.extractMerchantName(message);
+        // Identify bank
+        String bank = identifyBank(message, sender);
 
-        // 6. Create transaction object
+        // Extract additional details
+        String merchantName = lexicalAnalyzer.extractMerchantName(message);
+        String description = lexicalAnalyzer.generateDescription(
+                message, txnType, merchantName
+        );
+
+        // Create transaction object
         Transaction transaction = new Transaction(
-                bank.equals("UNKNOWN") ? "OTHER" : bank,
+                bank,
                 txnType.toString(),
                 amount,
                 timestamp,
-                lexicalAnalyzer.generateDescription(message, txnType, merchantName)
+                description
         );
 
+        // Set additional metadata
         transaction.setMerchantName(merchantName);
         transaction.setOriginalSms(message);
 
-        // 7. Generate a fingerprint for the transaction
+        // Generate unique fingerprint
         String fingerprint = generateFingerprint(transaction);
         transaction.setMessageHash(fingerprint);
-
-        Log.d(TAG, "Parsed transaction: " + transaction.getDescription() +
-                ", Amount: " + transaction.getAmount() +
-                ", Type: " + transaction.getType() +
-                ", Bank: " + transaction.getBank());
 
         return transaction;
     }
 
+    /**
+     * Determine transaction type
+     * @param message SMS message content
+     * @return TransactionType
+     */
+    public TransactionType determineTransactionType(String message) {
+        // Use multiple techniques for robust type detection
+        TransactionType sentimentType = sentimentAnalyzer.analyzeTransactionSentiment(message);
+        TransactionType lexicalType = lexicalAnalyzer.classifyTransactionType(message);
+
+        // Combine detection methods
+        if (sentimentType == TransactionType.CREDIT &&
+                lexicalType == TransactionType.CREDIT) {
+            return TransactionType.CREDIT;
+        }
+
+        if (sentimentType == TransactionType.DEBIT &&
+                lexicalType == TransactionType.DEBIT) {
+            return TransactionType.DEBIT;
+        }
+
+        // Fallback to sentiment analysis
+        return sentimentType != TransactionType.UNKNOWN ?
+                sentimentType : TransactionType.DEBIT;
+    }
+
+    /**
+     * Extract transaction amount
+     * @param message SMS message content
+     * @return Extracted amount or null
+     */
+    public Double extractAmount(String message) {
+        Matcher matcher = AMOUNT_PATTERN.matcher(message);
+
+        if (matcher.find()) {
+            try {
+                // Remove commas and parse
+                String amountStr = matcher.group(1).replace(",", "");
+                return Double.parseDouble(amountStr);
+            } catch (NumberFormatException e) {
+                Log.e(TAG, "Error parsing amount: " + matcher.group(1), e);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Identify bank from message
+     * @param message SMS message content
+     * @param sender SMS sender
+     * @return Bank name
+     */
+    public String identifyBank(String message, String sender) {
+        String lowerMessage = message.toLowerCase();
+        String lowerSender = sender != null ? sender.toLowerCase() : "";
+
+        // Check message content first
+        for (String bank : BANK_KEYWORDS) {
+            if (lowerMessage.contains(bank) || lowerSender.contains(bank)) {
+                return bank.substring(0, 1).toUpperCase() + bank.substring(1);
+            }
+        }
+
+        return "UNKNOWN";
+    }
+
+    /**
+     * Check for duplicate transactions
+     * @param transaction Transaction to check
+     * @param dao Transaction DAO
+     * @return true if duplicate, false otherwise
+     */
     public boolean isDuplicate(Transaction transaction, TransactionDao dao) {
-        // 1. Check in memory cache
+        // Check in-memory cache
         String fingerprint = transaction.getMessageHash();
         if (transactionCache.containsFingerprint(fingerprint)) {
-            Log.d(TAG, "Duplicate detected in memory cache: " + fingerprint);
+            Log.d(TAG, "Duplicate found in memory cache");
             return true;
         }
 
-        // 2. Check database for exact fingerprint match
-        boolean exactMatch = dao.hasTransaction(fingerprint);
-        if (exactMatch) {
-            // Add to cache for future lookups
+        // Check database for exact fingerprint
+        if (dao.hasTransaction(fingerprint)) {
             transactionCache.addFingerprint(fingerprint, transaction.getDate());
-            Log.d(TAG, "Duplicate detected with exact fingerprint match in database");
+            Log.d(TAG, "Duplicate found in database");
             return true;
         }
 
-        // 3. Look for semantic duplicates in a time window
+        // Check for semantic similarity in recent transactions
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(transaction.getDate());
-        cal.add(Calendar.HOUR, -24); // Look 24 hours back
+        cal.add(Calendar.HOUR, -24);
         long startTime = cal.getTimeInMillis();
 
         cal.setTimeInMillis(transaction.getDate());
-        cal.add(Calendar.HOUR, 24); // Look 24 hours forward
+        cal.add(Calendar.HOUR, 24);
         long endTime = cal.getTimeInMillis();
 
         List<Transaction> timeWindowTransactions = dao.getTransactionsBetweenDatesSync(startTime, endTime);
@@ -321,48 +262,26 @@ public class NLPTransactionProcessor {
         for (Transaction existingTransaction : timeWindowTransactions) {
             if (similarityDetector.areTransactionsSimilar(transaction, existingTransaction)) {
                 Log.d(TAG, "Duplicate detected through semantic similarity");
-                // Add to cache for future lookups
                 transactionCache.addFingerprint(fingerprint, transaction.getDate());
                 return true;
             }
         }
 
-        // No duplicate found, add to cache
+        // Add to cache and return false
         transactionCache.addFingerprint(fingerprint, transaction.getDate());
         return false;
     }
 
-    public void cleanupCache(long currentTime) {
-        // Clean up entries older than 7 days
-        Calendar cal = Calendar.getInstance();
-        cal.setTimeInMillis(currentTime);
-        cal.add(Calendar.DAY_OF_YEAR, -7);
-
-        transactionCache.cleanup(cal.getTimeInMillis());
-    }
-
+    /**
+     * Generate unique transaction fingerprint
+     * @param transaction Transaction object
+     * @return Unique hash
+     */
     private String generateFingerprint(Transaction transaction) {
-        // Round amount to two decimal places
-        String amountStr = String.format("%.2f", transaction.getAmount());
-
-        // Format date to day resolution (ignore time)
-        Calendar cal = Calendar.getInstance();
-        cal.setTimeInMillis(transaction.getDate());
-        cal.set(Calendar.HOUR_OF_DAY, 0);
-        cal.set(Calendar.MINUTE, 0);
-        cal.set(Calendar.SECOND, 0);
-        cal.set(Calendar.MILLISECOND, 0);
-        String dateStr = String.valueOf(cal.getTimeInMillis());
-
-        // Include merchant info if available
-        String merchantInfo = (transaction.getMerchantName() != null && !transaction.getMerchantName().isEmpty()) ?
-                transaction.getMerchantName().toLowerCase() : "";
-
-        // Include bank and type
-        String transactionInfo = transaction.getBank() + ":" + transaction.getType();
-
-        // Create fingerprint from all components
-        String content = amountStr + dateStr + merchantInfo + transactionInfo;
+        String content = transaction.getAmount() +
+                transaction.getDate() +
+                transaction.getDescription() +
+                transaction.getBank();
 
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -372,5 +291,45 @@ public class NLPTransactionProcessor {
             Log.e(TAG, "Error generating hash", e);
             return content;
         }
+    }
+
+    /**
+     * Check for exclusion keywords
+     * @param message Lowercase message
+     * @return boolean indicating presence of exclusion keywords
+     */
+    private boolean hasExclusionKeywords(String message) {
+        return EXCLUSION_KEYWORDS.stream().anyMatch(message::contains);
+    }
+
+    /**
+     * Check if message has valid amount
+     * @param message Lowercase message
+     * @return boolean indicating presence of valid amount
+     */
+    private boolean hasValidAmount(String message) {
+        return AMOUNT_PATTERN.matcher(message).find();
+    }
+
+    /**
+     * Count transaction-related keywords in message
+     * @param message Lowercase message
+     * @return Number of transaction keywords found
+     */
+    private int countTransactionKeywords(String message) {
+        return (int) TRANSACTION_KEYWORDS.stream()
+                .filter(message::contains)
+                .count();
+    }
+
+    /**
+     * Cleanup transaction cache
+     * @param currentTime Current timestamp
+     */
+    public void cleanupCache(long currentTime) {
+        Calendar cal = Calendar.getInstance();
+        cal.setTimeInMillis(currentTime);
+        cal.add(Calendar.DAY_OF_YEAR, -7);
+        transactionCache.cleanup(cal.getTimeInMillis());
     }
 }

@@ -139,10 +139,18 @@ public class TransactionParser {
         IGNORE_PATTERNS.add(Pattern.compile("(?i)min amount due"));
         IGNORE_PATTERNS.add(Pattern.compile("(?i)total amount due"));
 
-        // Promotional messages
+        // Promotional messages and advertisements - enhanced section
         IGNORE_PATTERNS.add(Pattern.compile("(?i)(offer|discount|cashback).*(apply|avail|eligible)"));
-        IGNORE_PATTERNS.add(Pattern.compile("(?i)(loan|credit).*(offer|eligible|pre-approved)"));
+        IGNORE_PATTERNS.add(Pattern.compile("(?i)(loan|credit).*(offer|eligible|pre-approved|apply|avail)"));
         IGNORE_PATTERNS.add(Pattern.compile("(?i)(personal|home|car|gold) loan"));
+        IGNORE_PATTERNS.add(Pattern.compile("(?i)(offer|deal).*(exclusive|limited|special)"));
+        IGNORE_PATTERNS.add(Pattern.compile("(?i)(sale|discount|off).*(now|today|limited)"));
+        IGNORE_PATTERNS.add(Pattern.compile("(?i)(click|visit|call).*(link|website|number|apply)"));
+        IGNORE_PATTERNS.add(Pattern.compile("(?i)(reward|loyalty) points"));
+        IGNORE_PATTERNS.add(Pattern.compile("(?i)(invest|investment|insurance).*(opportunity|scheme|plan)"));
+        IGNORE_PATTERNS.add(Pattern.compile("(?i)(upgrade|update).*(card|account|service)"));
+        IGNORE_PATTERNS.add(Pattern.compile("(?i)(apply.*now|avail.*now)"));
+        IGNORE_PATTERNS.add(Pattern.compile("(?i)(limited.*time|offer.*valid)"));
 
         // General non-transaction information
         IGNORE_PATTERNS.add(Pattern.compile("(?i)rewards (point|earned)"));
@@ -210,6 +218,12 @@ public class TransactionParser {
             }
         }
 
+        // Enhanced advertisement detection - check for common marketing phrases
+        if (containsAdvertisementPhrases(lowerMessage)) {
+            Log.d(TAG, "Ignored message as likely advertisement");
+            return false;
+        }
+
         // Future tense indicators - these are stronger signals to ignore
         if (lowerMessage.contains("will be") ||
                 lowerMessage.contains("scheduled") ||
@@ -227,15 +241,20 @@ public class TransactionParser {
             }
         }
 
-        // Promotional message indicators
-        if ((lowerMessage.contains("loan") || lowerMessage.contains("offer")) &&
+        // Promotional message indicators - enhanced check
+        if ((lowerMessage.contains("loan") || lowerMessage.contains("offer") ||
+                lowerMessage.contains("reward") || lowerMessage.contains("cashback") ||
+                lowerMessage.contains("discount") || lowerMessage.contains("deal")) &&
                 (lowerMessage.contains("apply") || lowerMessage.contains("avail") ||
-                        lowerMessage.contains("eligible") || lowerMessage.contains("pre-approved"))) {
+                        lowerMessage.contains("eligible") || lowerMessage.contains("pre-approved") ||
+                        lowerMessage.contains("call") || lowerMessage.contains("click") ||
+                        lowerMessage.contains("limited time") || lowerMessage.contains("hurry"))) {
 
-            // Only ignore if no transaction indicators present
-            if (!lowerMessage.contains("debited") &&
-                    !lowerMessage.contains("credited") &&
-                    !lowerMessage.contains("transaction")) {
+            // Only consider as transaction if it has clear transaction indicators
+            if (!lowerMessage.contains("debited from") &&
+                    !lowerMessage.contains("credited to") &&
+                    !lowerMessage.contains("transaction completed") &&
+                    !lowerMessage.contains("payment successful")) {
 
                 Log.d(TAG, "Ignored message due to promotional content");
                 return false;
@@ -270,11 +289,18 @@ public class TransactionParser {
         // Must have transaction indicators
         boolean hasTransactionIndicator = false;
 
+        // Check for strong transaction phrases - these are definite indicators
+        if (hasStrongTransactionPhrases(lowerMessage)) {
+            hasTransactionIndicator = true;
+        }
+
         // Check debit indicators
-        for (Pattern pattern : TRANSACTION_PATTERNS.get("DEBIT")) {
-            if (pattern.matcher(message).find()) {
-                hasTransactionIndicator = true;
-                break;
+        if (!hasTransactionIndicator) {
+            for (Pattern pattern : TRANSACTION_PATTERNS.get("DEBIT")) {
+                if (pattern.matcher(message).find()) {
+                    hasTransactionIndicator = true;
+                    break;
+                }
             }
         }
 
@@ -306,22 +332,73 @@ public class TransactionParser {
             }
         }
 
-        // Final check - some keywords are strong indicators regardless of other patterns
-        if (!hasTransactionIndicator) {
-            if (message.toLowerCase().matches(".*(transaction|txn|upi|neft|imps|rtgs).*")
-                    && hasAmount) {
+        // Final check - contextual analysis for account references
+        if (hasTransactionIndicator) {
+            boolean hasAccountReference = lowerMessage.contains("a/c") ||
+                    lowerMessage.contains("account") ||
+                    lowerMessage.contains("acct");
 
-                // Must have additional context to avoid false positives
-                if (message.toLowerCase().contains("debited") ||
-                        message.toLowerCase().contains("credited") ||
-                        message.toLowerCase().contains("paid") ||
-                        message.toLowerCase().contains("received")) {
-                    hasTransactionIndicator = true;
-                }
+            boolean hasCompletedIndicator = lowerMessage.contains("has been") ||
+                    lowerMessage.contains("was") ||
+                    lowerMessage.contains("is") ||
+                    lowerMessage.contains("done") ||
+                    lowerMessage.contains("processed") ||
+                    lowerMessage.contains("completed");
+
+            // If we have both account reference and completion indicator, it's very likely a transaction
+            if (hasAccountReference && hasCompletedIndicator) {
+                return true;
+            }
+
+            // For messages with amount and transaction indicator but no account reference,
+            // require additional context for higher confidence
+            if (!hasAccountReference) {
+                return hasAmount && hasTransactionIndicator &&
+                        (lowerMessage.contains("debited") ||
+                                lowerMessage.contains("credited") ||
+                                lowerMessage.contains("paid") ||
+                                lowerMessage.contains("received"));
             }
         }
 
         return hasTransactionIndicator;
+    }
+
+    private boolean containsAdvertisementPhrases(String message) {
+        String[] adPhrases = {
+                "exclusive offer", "limited time", "apply now", "avail now", "hurry",
+                "grab the offer", "special deal", "best offer", "save up to", "call now",
+                "click here", "visit our", "download our app", "check eligibility",
+                "pre-approved", "pre-qualified", "invite you", "introducing", "new launch",
+                "get instant", "lucky draw", "win exciting", "free gift", "terms and conditions",
+                "t&c apply", "subscribe", "upgrade now", "increase your limit"
+        };
+
+        for (String phrase : adPhrases) {
+            if (message.toLowerCase().contains(phrase)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean hasStrongTransactionPhrases(String message) {
+        String[] strongTransactionPhrases = {
+                "transaction completed", "payment successful", "debited from your account",
+                "credited to your account", "purchase at", "payment made", "transaction of",
+                "debit card transaction", "credit card transaction", "cash withdrawal",
+                "pos transaction", "online transaction", "upi transaction", "neft transaction",
+                "imps transaction", "rtgs transaction", "successful payment", "transfer completed"
+        };
+
+        for (String phrase : strongTransactionPhrases) {
+            if (message.toLowerCase().contains(phrase)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public Transaction parseTransaction(String message, String sender, long timestamp) {

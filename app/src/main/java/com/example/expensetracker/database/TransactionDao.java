@@ -4,8 +4,10 @@ import androidx.lifecycle.LiveData;
 import androidx.room.Dao;
 import androidx.room.Insert;
 import androidx.room.Query;
+import androidx.room.RawQuery;
 import androidx.room.Update;
 import androidx.room.Delete;
+import androidx.sqlite.db.SupportSQLiteQuery;
 //import androidx.room.Transaction;
 
 import com.example.expensetracker.models.Transaction;
@@ -122,12 +124,12 @@ public interface TransactionDao {
     LiveData<List<CategoryTotal>> getCategoryTotals(long startDate, long endDate);
 
     // Search functionality
-    @Query("SELECT * FROM transactions " +
-            "WHERE (description LIKE '%' || :query || '%' " +
-            "OR merchant_name LIKE '%' || :query || '%' " +
-            "OR bank LIKE '%' || :query || '%') " +
-            "ORDER BY date DESC")
-    LiveData<List<Transaction>> searchTransactions(String query);
+//    @Query("SELECT * FROM transactions " +
+//            "WHERE (description LIKE '%' || :query || '%' " +
+//            "OR merchant_name LIKE '%' || :query || '%' " +
+//            "OR bank LIKE '%' || :query || '%') " +
+//            "ORDER BY date DESC")
+//    LiveData<List<Transaction>> searchTransactions(String query);
 
     @Query("SELECT * FROM transactions WHERE type = :type")
     List<Transaction> getTransactionsByTypeSync(String type);
@@ -142,4 +144,51 @@ public interface TransactionDao {
         public String category;
         public double total;
     }
+
+    /**
+     * Perform a flexible search across multiple transaction fields
+     * @param query The raw SQL query built from a TransactionSearchFilter
+     * @return LiveData list of matching transactions
+     */
+    @RawQuery(observedEntities = Transaction.class)
+    LiveData<List<Transaction>> searchTransactionsWithFilter(SupportSQLiteQuery query);
+
+    /**
+     * Same as above but returns results synchronously
+     */
+    @RawQuery
+    List<Transaction> searchTransactionsWithFilterSync(SupportSQLiteQuery query);
+
+    /**
+     * Simple text search across multiple fields
+     * @param query Text to search for
+     * @return LiveData list of matching transactions
+     */
+    @Query("SELECT * FROM transactions WHERE " +
+            "description LIKE '%' || :query || '%' OR " +
+            "merchant_name LIKE '%' || :query || '%' OR " +
+            "category LIKE '%' || :query || '%' OR " +
+            "bank LIKE '%' || :query || '%' OR " +
+            "original_sms LIKE '%' || :query || '%' " +
+            "ORDER BY date DESC")
+    List<Transaction> searchTransactions(String query);
+
+    /**
+     * Get a list of all unique merchant names in the database
+     */
+    @Query("SELECT DISTINCT merchant_name FROM transactions WHERE merchant_name IS NOT NULL AND merchant_name != '' ORDER BY merchant_name")
+    List<String> getAllMerchants();
+
+    /**
+     * Get all transactions for a specific merchant
+     */
+    @Query("SELECT * FROM transactions WHERE merchant_name LIKE '%' || :merchantName || '%' ORDER BY date DESC")
+    List<Transaction> getTransactionsByMerchant(String merchantName);
+
+    /**
+     * Get transactions by amount range
+     */
+    @Query("SELECT * FROM transactions WHERE amount BETWEEN :minAmount AND :maxAmount ORDER BY date DESC")
+    List<Transaction> getTransactionsByAmountRange(double minAmount, double maxAmount);
+
 }
