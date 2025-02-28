@@ -510,7 +510,7 @@ public class EnhancedTransactionParser {
      * @param message The lowercase message content
      * @return true if strong transaction evidence is found
      */
-    private boolean hasStrongTransactionEvidence(String message) {
+    public boolean hasStrongTransactionEvidence(String message) {
         // Very specific transaction patterns that almost never appear in promotional messages
         String[] strongPatterns = {
                 "debited from a/c", "credited to a/c", "debited from your a/c", "credited to your a/c",
@@ -560,7 +560,7 @@ public class EnhancedTransactionParser {
      * Improved logic for isPromotionalMessage() method
      * to better detect promotional, OTP, and balance-only messages
      */
-    private boolean isPromotionalMessage(String message) {
+    public boolean isPromotionalMessage(String message) {
         int promotionalScore = 0;
 
         // Marketing call-to-action phrases (strong indicators)
@@ -928,7 +928,7 @@ public class EnhancedTransactionParser {
     /**
      * Identifies the bank from a message or sender
      */
-    private String identifyBank(String message, String sender) {
+    public String identifyBank(String message, String sender) {
         if (message == null) {
             return null;
         }
@@ -962,7 +962,7 @@ public class EnhancedTransactionParser {
     /**
      * Determines transaction type (DEBIT/CREDIT) from message
      */
-    private String determineTransactionType(String message) {
+    public String determineTransactionType(String message) {
         if (message == null) {
             return null;
         }
@@ -1007,7 +1007,7 @@ public class EnhancedTransactionParser {
     /**
      * Extracts transaction amount from message
      */
-    private Double extractAmount(String message) {
+    public Double extractAmount(String message) {
         if (message == null) {
             return null;
         }
@@ -1063,7 +1063,7 @@ public class EnhancedTransactionParser {
     /**
      * Extracts transaction date from message, falling back to provided timestamp
      */
-    private Long extractDate(String message, long fallbackTimestamp) {
+    public Long extractDate(String message, long fallbackTimestamp) {
         if (message == null) {
             return fallbackTimestamp;
         }
@@ -1107,7 +1107,7 @@ public class EnhancedTransactionParser {
     /**
      * Extracts merchant name from transaction message
      */
-    private String extractMerchant(String message) {
+    public String extractMerchant(String message) {
         if (message == null) {
             return null;
         }
@@ -1219,7 +1219,7 @@ public class EnhancedTransactionParser {
     /**
      * Determines the transaction method (UPI, NEFT, Card, etc.)
      */
-    private String determineTransactionMethod(String message) {
+    public String determineTransactionMethod(String message) {
         if (message == null) {
             return "Transaction";
         }
@@ -1242,7 +1242,7 @@ public class EnhancedTransactionParser {
     /**
      * Extracts reference number from message
      */
-    private String extractReferenceNumber(String message) {
+    public String extractReferenceNumber(String message) {
         if (message == null) {
             return null;
         }
@@ -1268,7 +1268,7 @@ public class EnhancedTransactionParser {
     /**
      * Determines transaction category based on message content and merchant
      */
-    private String determineCategory(String message, String merchantName) {
+    public String determineCategory(String message, String merchantName) {
         if (message == null) {
             return null;
         }
@@ -1308,7 +1308,7 @@ public class EnhancedTransactionParser {
     /**
      * Generates a transaction description from the extracted components
      */
-    private String generateDescription(String message, String type, String merchantName,
+    public String generateDescription(String message, String type, String merchantName,
                                        String transactionMethod, String referenceNumber) {
         StringBuilder description = new StringBuilder();
 
@@ -1444,7 +1444,7 @@ public class EnhancedTransactionParser {
     /**
      * Detects if a transaction is likely recurring based on message content
      */
-    private boolean detectRecurringTransaction(String message, String description) {
+    public boolean detectRecurringTransaction(String message, String description) {
         if (message == null) {
             return false;
         }
@@ -1483,7 +1483,7 @@ public class EnhancedTransactionParser {
     /**
      * Generates a unique hash for the transaction to prevent duplicates
      */
-    private String generateMessageHash(Double amount, Long date, String description, String merchantName) {
+    public String generateMessageHash(Double amount, Long date, String description, String merchantName) {
         // Format amount with 2 decimal places
         String amountStr = String.format("%.2f", amount);
 
@@ -1531,8 +1531,8 @@ public class EnhancedTransactionParser {
     }
 
     /**
-     * Utility method to try to extract any valid transaction information from a problematic message
-     * This is a fallback method when the primary parsing fails
+     * Improved fallback method with stricter checks
+     * Only attempts to parse problematic messages that still have a high likelihood of being transactions
      */
     public Transaction attemptFallbackParsing(String message, String sender, long timestamp) {
         if (message == null || message.trim().isEmpty()) {
@@ -1541,7 +1541,52 @@ public class EnhancedTransactionParser {
 
         Log.d(TAG, "Attempting fallback parsing for message: " + message);
 
-        // Just extract basic amount and assume a debit transaction
+        // CRITICAL FIX: First verify this message has basic transaction characteristics
+        // before attempting to extract data from it
+
+        String lowerMessage = message.toLowerCase();
+
+        // 1. Check if this is a balance-only statement
+        if (lowerMessage.contains("available bal") ||
+                lowerMessage.contains("avl bal") ||
+                lowerMessage.contains("balance in") ||
+                lowerMessage.contains("bal in")) {
+
+            // If it looks like a balance statement and has no transaction verbs, reject it
+            if (!lowerMessage.contains("debited") &&
+                    !lowerMessage.contains("credited") &&
+                    !lowerMessage.contains("payment") &&
+                    !lowerMessage.contains("transfer")) {
+
+                Log.d(TAG, "Fallback rejected: Balance statement message");
+                return null;
+            }
+        }
+
+        // 2. Check for "as on yesterday" or "subject to clearing" - very specific to balance statements
+        if ((lowerMessage.contains("as on yesterday") || lowerMessage.contains("subject to clearing"))
+                && !lowerMessage.contains("debited") && !lowerMessage.contains("credited")) {
+            Log.d(TAG, "Fallback rejected: Balance report message");
+            return null;
+        }
+
+        // 3. Required: Must have an amount AND a transaction verb to be considered
+        boolean hasAmount = extractAmount(message) != null;
+        boolean hasTransactionVerb = lowerMessage.contains("debited") ||
+                lowerMessage.contains("credited") ||
+                lowerMessage.contains("paid") ||
+                lowerMessage.contains("spent") ||
+                lowerMessage.contains("received") ||
+                lowerMessage.contains("transferred");
+
+        if (!hasAmount || !hasTransactionVerb) {
+            Log.d(TAG, "Fallback rejected: Missing minimum transaction evidence");
+            return null;
+        }
+
+        // Only now proceed with extraction since this looks like a transaction
+
+        // Get the amount
         Double amount = extractAmount(message);
         if (amount == null) {
             Log.d(TAG, "Fallback parsing failed - no amount found");

@@ -10,7 +10,9 @@ import android.util.Log;
 import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.database.TransactionDatabase;
 import com.example.expensetracker.models.Transaction;
+import com.example.expensetracker.parser.ConfidenceScoreTransactionParser;
 import com.example.expensetracker.parser.EnhancedTransactionParser;
+import com.example.expensetracker.parser.ImprovedTransactionParser;
 import com.example.expensetracker.utils.PreferencesManager;
 
 import java.util.Date;
@@ -29,7 +31,7 @@ public class EnhancedSMSReceiver extends BroadcastReceiver {
 
     public EnhancedSMSReceiver() {
         executorService = Executors.newSingleThreadExecutor();
-        parser = new EnhancedTransactionParser();
+        parser = new ConfidenceScoreTransactionParser();
     }
 
     @Override
