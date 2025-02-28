@@ -8,7 +8,6 @@ import androidx.room.RawQuery;
 import androidx.room.Update;
 import androidx.room.Delete;
 import androidx.sqlite.db.SupportSQLiteQuery;
-//import androidx.room.Transaction;
 
 import com.example.expensetracker.models.Transaction;
 import java.util.List;
@@ -123,14 +122,6 @@ public interface TransactionDao {
             "GROUP BY category")
     LiveData<List<CategoryTotal>> getCategoryTotals(long startDate, long endDate);
 
-    // Search functionality
-//    @Query("SELECT * FROM transactions " +
-//            "WHERE (description LIKE '%' || :query || '%' " +
-//            "OR merchant_name LIKE '%' || :query || '%' " +
-//            "OR bank LIKE '%' || :query || '%') " +
-//            "ORDER BY date DESC")
-//    LiveData<List<Transaction>> searchTransactions(String query);
-
     @Query("SELECT * FROM transactions WHERE type = :type")
     List<Transaction> getTransactionsByTypeSync(String type);
 
@@ -198,28 +189,15 @@ public interface TransactionDao {
     int getAutoExcludedTransactionCount();
 
     /**
-     * Get all auto-excluded transactions from OTHER banks
+     * Get all auto-excluded transactions
      */
     @Query("SELECT * FROM transactions WHERE bank = 'OTHER' AND is_excluded_from_total = 1 AND is_other_debit = 1 ORDER BY date DESC")
     List<Transaction> getAutoExcludedTransactionsSync();
 
     /**
-     * Include all auto-excluded transactions (set excluded status to false)
-     * Returns the number of transactions updated
+     * Include all auto-excluded transactions
+     * @return Count of updated transactions
      */
     @Query("UPDATE transactions SET is_excluded_from_total = 0 WHERE bank = 'OTHER' AND is_excluded_from_total = 1 AND is_other_debit = 1")
     int includeAllAutoExcludedTransactions();
-
-    /**
-     * Get transactions from OTHER banks
-     */
-    @Query("SELECT * FROM transactions WHERE bank = 'OTHER' ORDER BY date DESC")
-    List<Transaction> getOtherBankTransactionsSync();
-
-    /**
-     * Get OTHER bank transactions between dates
-     */
-    @Query("SELECT * FROM transactions WHERE bank = 'OTHER' AND date BETWEEN :startDate AND :endDate ORDER BY date DESC")
-    List<Transaction> getOtherBankTransactionsBetweenDatesSync(long startDate, long endDate);
-
 }

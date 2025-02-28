@@ -355,6 +355,24 @@ public class EnhancedTransactionParser {
         EXCLUSION_PATTERNS.add(Pattern.compile("(?i)(\\d{4,6}).*(otp|code|one.?time.?password)"));
         EXCLUSION_PATTERNS.add(Pattern.compile("(?i)(otp|code|one.?time.?password).*(\\d{4,6})"));
         EXCLUSION_PATTERNS.add(Pattern.compile("(?i)(not done by you).*(call|contact)"));
+
+        // Add specific patterns for the examples you provided
+        EXCLUSION_PATTERNS.add(Pattern.compile("(?i)instant cash alert.*ready to be credited"));
+        EXCLUSION_PATTERNS.add(Pattern.compile("(?i)best deal alert"));
+        EXCLUSION_PATTERNS.add(Pattern.compile("(?i)get a loan of"));
+        EXCLUSION_PATTERNS.add(Pattern.compile("(?i)check emi:"));
+        EXCLUSION_PATTERNS.add(Pattern.compile("(?i)available bal.*as on yesterday"));
+        EXCLUSION_PATTERNS.add(Pattern.compile("(?i)for real time a/c bal dial"));
+        EXCLUSION_PATTERNS.add(Pattern.compile("(?i)cheques are subject to clearing"));
+
+        // More specific patterns for promotional messages with URLs
+        EXCLUSION_PATTERNS.add(Pattern.compile("(?i)hdfcbk\\.io"));
+        EXCLUSION_PATTERNS.add(Pattern.compile("(?i)https://\\S+"));
+        EXCLUSION_PATTERNS.add(Pattern.compile("(?i)http://\\S+"));
+
+        // Patterns for T&C which indicate promotional content
+        EXCLUSION_PATTERNS.add(Pattern.compile("(?i)T&C$"));
+        EXCLUSION_PATTERNS.add(Pattern.compile("(?i)T&C apply"));
     }
 
     private void initializeCategoryKeywords() {
@@ -660,6 +678,35 @@ public class EnhancedTransactionParser {
             return false;
         }
 
+        // Quick check for key phrases that indicate non-transactions
+        if (lowerMessage.contains("alert!") &&
+                (lowerMessage.contains("ready to be credited") || lowerMessage.contains("best deal"))) {
+            Log.d(TAG, "Promotional alert detected, not a transaction");
+            return false;
+        }
+
+        // Check for balance inquiry messages
+        if (lowerMessage.contains("available bal") &&
+                (lowerMessage.contains("as on yesterday") || lowerMessage.contains("subject to clearing"))) {
+            Log.d(TAG, "Balance inquiry message detected, not a transaction");
+            return false;
+        }
+
+        // Check for links/URLs - strong indicators of promotional content
+        if (lowerMessage.contains("http") || lowerMessage.contains(".io/") ||
+                lowerMessage.contains(".com/") || lowerMessage.contains("www.")) {
+            Log.d(TAG, "URL detected in message, likely promotional");
+            return false;
+        }
+
+        // Check for EMI/loan offers
+        if ((lowerMessage.contains("loan") || lowerMessage.contains("emi")) &&
+                (lowerMessage.contains("get") || lowerMessage.contains("offer") ||
+                        lowerMessage.contains("check") || lowerMessage.contains("alert"))) {
+            Log.d(TAG, "Loan/EMI offer detected, not a transaction");
+            return false;
+        }
+
         // 3. Balance-only messages
         boolean isBalanceOnly = (lowerMessage.contains("available bal") ||
                 lowerMessage.contains("avl bal") ||
@@ -703,6 +750,12 @@ public class EnhancedTransactionParser {
 
         // Enhanced promotional message filter
         if (isPromotionalMessage(lowerMessage)) {
+            Log.d(TAG, "Message appears to be promotional, ignoring");
+            return false;
+        }
+
+        // Enhanced promotional message filter
+        if (isBalanceEnquiryMessage(lowerMessage)) {
             Log.d(TAG, "Message appears to be promotional, ignoring");
             return false;
         }

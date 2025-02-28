@@ -8,6 +8,9 @@ import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.repository.TransactionRepository;
 
@@ -16,12 +19,14 @@ public class TransactionViewModel extends AndroidViewModel {
     private MutableLiveData<Double> budget;
     private LiveData<List<Transaction>> allTransactions;
     private MutableLiveData<Boolean> transactionUpdated = new MutableLiveData<>(false);
+    private ExecutorService executorService;
 
     public TransactionViewModel(Application application) {
         super(application);
         repository = new TransactionRepository(application);
         budget = new MutableLiveData<>(0.0);
         allTransactions = repository.getAllTransactions();
+        executorService = Executors.newSingleThreadExecutor();
     }
 
     public void hasAnyTransactions(TransactionRepository.Callback<Boolean> callback) {
