@@ -212,4 +212,8 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
             }
         }
     }
+
+    public List<Transaction> getTransactions() {
+        return new ArrayList<>(transactions); // Return a copy to avoid modification
+    }
 }

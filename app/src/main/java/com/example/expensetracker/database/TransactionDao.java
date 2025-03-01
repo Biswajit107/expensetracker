@@ -200,4 +200,8 @@ public interface TransactionDao {
      */
     @Query("UPDATE transactions SET is_excluded_from_total = 0 WHERE bank = 'OTHER' AND is_excluded_from_total = 1 AND is_other_debit = 1")
     int includeAllAutoExcludedTransactions();
+
+    // And add this query to your TransactionDao interface
+    @Query("SELECT DISTINCT bank FROM transactions WHERE bank IS NOT NULL ORDER BY bank")
+    List<String> getUniqueBanks();
 }

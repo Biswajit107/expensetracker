@@ -56,7 +56,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Merchant Name"
+            android:text="Description or Merchant"
             android:textStyle="bold" />
 
         <com.google.android.material.textfield.TextInputLayout
@@ -65,7 +65,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:layout_marginBottom="16dp"
-            android:hint="Enter merchant name">
+            android:hint="Enter text to search">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/merchantInput"
@@ -132,29 +132,31 @@
                 android:text="To Date" />
         </LinearLayout>
 
-        <!-- Additional Filters -->
+        <!-- Additional Filters Section -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Additional Filters"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
             android:orientation="vertical">
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/excludedSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginVertical="4dp"
                 android:text="Show excluded transactions" />
 
             <com.google.android.material.switchmaterial.SwitchMaterial
                 android:id="@+id/recurringSwitch"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginVertical="4dp"
                 android:text="Show recurring transactions only" />
         </LinearLayout>
     </LinearLayout>

@@ -1,5 +1,6 @@
 package com.example.expensetracker;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.lifecycle.ViewModelProvider;
@@ -24,6 +25,7 @@ import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -36,6 +38,7 @@ import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.receivers.EnhancedSMSReceiver;
 import com.example.expensetracker.receivers.SMSReceiver;
 import com.example.expensetracker.repository.TransactionRepository;
+import com.example.expensetracker.utils.TransactionSearchSortUtil;
 import com.example.expensetracker.viewmodel.TransactionViewModel;
 import com.example.expensetracker.utils.PreferencesManager;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
@@ -45,6 +48,7 @@ import com.google.android.material.card.MaterialCardView;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -77,6 +81,10 @@ public class MainActivity extends AppCompatActivity {
     private PreferencesManager preferencesManager;
     private ExecutorService executorService;
 
+    private EditText searchInput;
+    private Button sortButton;
+    private List<Transaction> allTransactions = new ArrayList<>();
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -97,6 +105,128 @@ public class MainActivity extends AppCompatActivity {
         setupBottomNavigation();
 
         checkAutoExcludedTransactions();
+
+        // Initialize search and sort components
+        searchInput = findViewById(R.id.searchInput);
+        sortButton = findViewById(R.id.sortButton);
+
+        // Set up search functionality
+        setupSearch();
+
+        // Set up sort functionality
+        setupSort();
+
+        // Your existing ViewModel observer
+        viewModel.getAllTransactions().observe(this, transactions -> {
+            allTransactions = new ArrayList<>(transactions); // Save a copy of all transactions
+            adapter.setTransactions(transactions);
+        });
+    }
+
+    private void setupSearch() {
+        searchInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                filterTransactions(s.toString());
+            }
+        });
+    }
+
+    private void filterTransactions(String query) {
+        if (query.isEmpty()) {
+            // If search is empty, show all transactions
+            adapter.setTransactions(allTransactions);
+        } else {
+            // Filter transactions based on query
+            List<Transaction> filteredList = new ArrayList<>();
+            String lowerQuery = query.toLowerCase();
+
+            for (Transaction transaction : allTransactions) {
+                if ((transaction.getDescription() != null &&
+                        transaction.getDescription().toLowerCase().contains(lowerQuery)) ||
+                        (transaction.getBank() != null &&
+                                transaction.getBank().toLowerCase().contains(lowerQuery)) ||
+                        (transaction.getCategory() != null &&
+                                transaction.getCategory().toLowerCase().contains(lowerQuery)) ||
+                        (transaction.getMerchantName() != null &&
+                                transaction.getMerchantName().toLowerCase().contains(lowerQuery)) ||
+                        String.valueOf(transaction.getAmount()).contains(lowerQuery)) {
+
+                    filteredList.add(transaction);
+                }
+            }
+
+            adapter.setTransactions(filteredList);
+        }
+    }
+
+    private void setupSort() {
+        sortButton.setOnClickListener(v -> {
+            String[] sortOptions = {
+                    "Date (newest first)",
+                    "Date (oldest first)",
+                    "Amount (highest first)",
+                    "Amount (lowest first)",
+                    "Description (A-Z)",
+                    "Description (Z-A)"
+            };
+
+            new AlertDialog.Builder(this)
+                    .setTitle("Sort Transactions By")
+                    .setItems(sortOptions, (dialog, which) -> {
+                        // Apply the selected sort
+                        sortTransactions(which);
+                    })
+                    .show();
+        });
+    }
+
+    private void sortTransactions(int sortOption) {
+        // Get current list (might be filtered by search)
+        List<Transaction> currentList = new ArrayList<>(adapter.getTransactions());
+
+        switch (sortOption) {
+            case 0: // Date (newest first)
+                Collections.sort(currentList, (a, b) -> Long.compare(b.getDate(), a.getDate()));
+                break;
+
+            case 1: // Date (oldest first)
+                Collections.sort(currentList, (a, b) -> Long.compare(a.getDate(), b.getDate()));
+                break;
+
+            case 2: // Amount (highest first)
+                Collections.sort(currentList, (a, b) -> Double.compare(b.getAmount(), a.getAmount()));
+                break;
+
+            case 3: // Amount (lowest first)
+                Collections.sort(currentList, (a, b) -> Double.compare(a.getAmount(), b.getAmount()));
+                break;
+
+            case 4: // Description (A-Z)
+                Collections.sort(currentList, (a, b) -> {
+                    String descA = a.getDescription() != null ? a.getDescription() : "";
+                    String descB = b.getDescription() != null ? b.getDescription() : "";
+                    return descA.compareToIgnoreCase(descB);
+                });
+                break;
+
+            case 5: // Description (Z-A)
+                Collections.sort(currentList, (a, b) -> {
+                    String descA = a.getDescription() != null ? a.getDescription() : "";
+                    String descB = b.getDescription() != null ? b.getDescription() : "";
+                    return descB.compareToIgnoreCase(descA);
+                });
+                break;
+        }
+
+        // Update adapter with sorted list
+        adapter.setTransactions(currentList);
     }
 
     private void setupDefaultDates() {

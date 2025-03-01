@@ -7,6 +7,8 @@ import android.widget.Toast;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -184,5 +186,30 @@ public class TransactionViewModel extends AndroidViewModel {
                         Toast.LENGTH_LONG).show();
             }
         });
+    }
+
+    /**
+     * Get list of available banks from transaction data
+     */
+    public List<String> getAvailableBanks() {
+        // Create a LiveData transformation to get unique bank values
+        List<String> banks = new ArrayList<>();
+        banks.add("All Banks");
+
+        // Get unique bank values from repository
+        repository.getUniqueBanksList(uniqueBanks -> {
+            banks.addAll(uniqueBanks);
+        });
+
+        // If list is empty (first run), add defaults
+        if (banks.size() <= 1) {
+            banks.add("HDFC");
+            banks.add("SBI");
+            banks.add("ICICI");
+            banks.add("AXIS");
+            banks.add("OTHER");
+        }
+
+        return banks;
     }
 }

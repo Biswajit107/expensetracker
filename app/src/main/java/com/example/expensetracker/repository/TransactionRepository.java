@@ -164,4 +164,15 @@ public class TransactionRepository {
         });
     }
 
+    // Add to TransactionRepository.java
+    public void getUniqueBanksList(Callback<List<String>> callback) {
+        executorService.execute(() -> {
+            List<String> banks = transactionDao
+                    .getUniqueBanks();
+            new Handler(Looper.getMainLooper()).post(() -> {
+                callback.onResult(banks);
+            });
+        });
+    }
+
 }
