@@ -14,6 +14,7 @@ import com.example.expensetracker.parser.ConfidenceScoreTransactionParser;
 import com.example.expensetracker.parser.EnhancedTransactionParser;
 import com.example.expensetracker.parser.ImprovedTransactionParser;
 import com.example.expensetracker.utils.PreferencesManager;
+import com.example.expensetracker.utils.TransactionDuplicateDetector;
 
 import java.util.Date;
 import java.util.List;
@@ -76,7 +77,7 @@ public class EnhancedSMSReceiver extends BroadcastReceiver {
                 TransactionDao dao = TransactionDatabase.getInstance(context).transactionDao();
 
                 // Step 4: Check if this is a duplicate
-                if (parser.isDuplicate(transaction, dao)) {
+                if (TransactionDuplicateDetector.isDuplicate(transaction, dao)) {
                     Log.d(TAG, "Duplicate transaction detected, skipping: " + transaction.getDescription());
                     return;
                 }

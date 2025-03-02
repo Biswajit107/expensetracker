@@ -31,6 +31,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.example.expensetracker.adapters.TransactionAdapter;
+import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.database.TransactionDatabase;
 import com.example.expensetracker.dialogs.AutoExcludedTransactionsDialog;
 import com.example.expensetracker.dialogs.TransactionEditDialog;
@@ -579,8 +580,33 @@ public class MainActivity extends AppCompatActivity {
                     startActivity(new Intent(this, GroupedExpensesActivity.class));
                     finish();
                     return true;
+                case R.id.nav_excluded:
+                    startActivity(new Intent(this, ExcludedTransactionsActivity.class));
+                    finish();
+                    return true;
             }
             return false;
+        });
+
+        // Check if there are excluded transactions and add a badge if there are
+        checkForExcludedTransactions(bottomNav);
+    }
+
+    private void checkForExcludedTransactions(BottomNavigationView bottomNav) {
+        executorService.execute(() -> {
+            TransactionDao dao = TransactionDatabase.getInstance(this).transactionDao();
+            int count = dao.getAutomaticallyExcludedTransactionCount();
+
+            runOnUiThread(() -> {
+                if (count > 0) {
+                    // Set badge with count on the excluded tab
+                    bottomNav.getOrCreateBadge(R.id.nav_excluded).setNumber(count);
+                    bottomNav.getOrCreateBadge(R.id.nav_excluded).setVisible(true);
+                } else {
+                    // Remove badge if no excluded transactions
+                    bottomNav.removeBadge(R.id.nav_excluded);
+                }
+            });
         });
     }
 
@@ -836,5 +862,14 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
         });
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Refresh the badge count on bottom navigation
+        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
+        checkForExcludedTransactions(bottomNav);
     }
 }

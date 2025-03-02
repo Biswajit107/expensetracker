@@ -204,4 +204,44 @@ public interface TransactionDao {
     // And add this query to your TransactionDao interface
     @Query("SELECT DISTINCT bank FROM transactions WHERE bank IS NOT NULL ORDER BY bank")
     List<String> getUniqueBanks();
+
+    /**
+     * Get all automatically excluded transactions (both duplicates and others)
+     */
+    @Query("SELECT * FROM transactions WHERE is_excluded_from_total = 1 AND " +
+            "(is_other_debit = 1 OR description LIKE '%[DUPLICATE]%' OR description LIKE '%[AUTO-EXCLUDED]%') " +
+            "ORDER BY date DESC")
+    List<Transaction> getAllAutomaticallyExcludedTransactionsSync();
+
+    /**
+     * Get all duplicate transactions specifically
+     */
+    @Query("SELECT * FROM transactions WHERE description LIKE '%[DUPLICATE]%' ORDER BY date DESC")
+    List<Transaction> getDuplicateTransactionsSync();
+
+    /**
+     * Get all excluded transactions from unknown sources (non-duplicates)
+     */
+    @Query("SELECT * FROM transactions WHERE is_excluded_from_total = 1 AND is_other_debit = 1 " +
+            "AND description NOT LIKE '%[DUPLICATE]%' ORDER BY date DESC")
+    List<Transaction> getUnknownSourceExcludedTransactionsSync();
+
+    /**
+     * Count of automatically excluded transactions (both duplicates and others)
+     */
+    @Query("SELECT COUNT(*) FROM transactions WHERE is_excluded_from_total = 1 AND " +
+            "(is_other_debit = 1 OR description LIKE '%[DUPLICATE]%' OR description LIKE '%[AUTO-EXCLUDED]%')")
+    int getAutomaticallyExcludedTransactionCount();
+
+    /**
+     * Count of duplicate transactions
+     */
+    @Query("SELECT COUNT(*) FROM transactions WHERE description LIKE '%[DUPLICATE]%'")
+    int getDuplicateTransactionCount();
+
+    /**
+     * Include all excluded transactions in totals
+     */
+    @Query("UPDATE transactions SET is_excluded_from_total = 0 WHERE is_excluded_from_total = 1")
+    int includeAllExcludedTransactions();
 }

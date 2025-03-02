@@ -85,7 +85,8 @@ public class ConfidenceScoreTransactionParser extends EnhancedTransactionParser 
         String bank = score.detectedBank != null ? score.detectedBank : identifyBank(message, sender);
         String type = score.transactionType != null ? score.transactionType : determineTransactionType(message);
         Double amount = score.detectedAmount != null ? score.detectedAmount : extractAmount(message);
-        Long date = score.detectedDate != null ? score.detectedDate : extractDate(message, timestamp);
+//        Long date = score.detectedDate != null ? score.detectedDate : extractDate(message, timestamp);
+        Long date = timestamp;
         String merchantName = score.detectedMerchant != null ? score.detectedMerchant : extractMerchant(message);
         String transactionMethod = determineTransactionMethod(message);
         String referenceNumber = score.referenceNumber != null ? score.referenceNumber : extractReferenceNumber(message);

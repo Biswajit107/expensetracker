@@ -70,6 +70,14 @@
         android:gravity="end">
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/viewSmsButton"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:icon="@drawable/ic_message"
+            android:layout_marginEnd="8dp"/>
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/cancelButton"
             style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="wrap_content"
@@ -84,19 +92,19 @@
     </LinearLayout>
 
     <!-- Add this near the bottom of dialog_edit_transaction.xml -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="end">
+<!--    <LinearLayout-->
+<!--        android:layout_width="match_parent"-->
+<!--        android:layout_height="wrap_content"-->
+<!--        android:orientation="horizontal"-->
+<!--        android:gravity="end">-->
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/viewSmsButton"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            app:icon="@drawable/ic_message"
-            android:layout_marginEnd="8dp"/>
+<!--        <com.google.android.material.button.MaterialButton-->
+<!--            android:id="@+id/viewSmsButton"-->
+<!--            style="@style/Widget.MaterialComponents.Button.TextButton"-->
+<!--            android:layout_width="wrap_content"-->
+<!--            android:layout_height="wrap_content"-->
+<!--            app:icon="@drawable/ic_message"-->
+<!--            android:layout_marginEnd="8dp"/>-->
 
 <!--        <com.google.android.material.button.MaterialButton-->
 <!--            android:id="@+id/cancelButton"-->
@@ -110,5 +118,5 @@
 <!--            android:layout_width="wrap_content"-->
 <!--            android:layout_height="wrap_content"-->
 <!--            android:text="Save"/>-->
-    </LinearLayout>
+<!--    </LinearLayout>-->
 </LinearLayout>

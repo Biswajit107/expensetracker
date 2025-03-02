@@ -856,7 +856,8 @@ public class EnhancedTransactionParser {
         String bank = identifyBank(message, sender);
         String type = determineTransactionType(message);
         Double amount = extractAmount(message);
-        Long date = extractDate(message, timestamp);
+//        Long date = extractDate(message, timestamp);
+        Long date = timestamp;
         String merchantName = extractMerchant(message);
         String transactionMethod = determineTransactionMethod(message);
         String referenceNumber = extractReferenceNumber(message);
@@ -1064,6 +1065,7 @@ public class EnhancedTransactionParser {
      * Extracts transaction date from message, falling back to provided timestamp
      */
     public Long extractDate(String message, long fallbackTimestamp) {
+
         if (message == null) {
             return fallbackTimestamp;
         }
