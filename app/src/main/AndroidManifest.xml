@@ -15,17 +15,26 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <activity android:name=".AnalyticsActivity" />
-        <activity android:name=".PredictionActivity" />
-        <activity android:name=".GroupedExpensesActivity" />
-        <activity android:name=".ExcludedTransactionsActivity" />
+        <activity
+            android:name=".AnalyticsActivity"
+            android:launchMode="singleTask"/>
+        <activity
+            android:name=".PredictionActivity"
+            android:launchMode="singleTask"/>
+        <activity
+            android:name=".GroupedExpensesActivity"
+            android:launchMode="singleTask"/>
+        <activity
+            android:launchMode="singleTask"
+            android:name=".ExcludedTransactionsActivity" />
 
         <receiver
             android:name=".receivers.EnhancedSMSReceiver"

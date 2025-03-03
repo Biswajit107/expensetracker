@@ -18,4 +18,22 @@ public class PreferencesManager {
     public long getLastSyncTime() {
         return prefs.getLong(KEY_LAST_SYNC, 0);
     }
+
+    private static final String KEY_FROM_DATE = "from_date";
+    private static final String KEY_TO_DATE = "to_date";
+
+    public void saveSelectedDateRange(long fromDate, long toDate) {
+        prefs.edit()
+                .putLong(KEY_FROM_DATE, fromDate)
+                .putLong(KEY_TO_DATE, toDate)
+                .apply();
+    }
+
+    public long getFromDate() {
+        return prefs.getLong(KEY_FROM_DATE, 0);
+    }
+
+    public long getToDate() {
+        return prefs.getLong(KEY_TO_DATE, 0);
+    }
 }

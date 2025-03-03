@@ -1,6 +1,8 @@
 package com.example.expensetracker;
 
+import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.TextView;
@@ -17,6 +19,7 @@ import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.database.TransactionDatabase;
 import com.example.expensetracker.dialogs.TransactionEditDialog;
 import com.example.expensetracker.models.Transaction;
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
@@ -79,11 +82,54 @@ public class ExcludedTransactionsActivity extends AppCompatActivity {
 
         // Load transactions with current filter
         loadTransactions();
+
+        setupBottomNavigation();
+    }
+
+    private void setupBottomNavigation() {
+        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
+        bottomNav.setSelectedItemId(R.id.nav_excluded);
+
+        bottomNav.setOnItemSelectedListener(item -> {
+            Intent intent;
+
+            switch (item.getItemId()) {
+                case R.id.nav_home:
+                    intent = new Intent(this, MainActivity.class);
+                    startActivity(intent);
+                    return true;
+
+                case R.id.nav_analytics:
+                    intent = new Intent(this, AnalyticsActivity.class);
+                    startActivity(intent);
+                    return true;
+
+                case R.id.nav_predictions:
+                    intent = new Intent(this, PredictionActivity.class);
+                    startActivity(intent);
+                    return true;
+
+                case R.id.nav_groups:
+                    intent = new Intent(this, GroupedExpensesActivity.class);
+                    startActivity(intent);
+                    return true;
+
+                case R.id.nav_excluded:
+                    return true;
+            }
+            return false;
+        });
     }
 
     private void setupFilterChips() {
         // Make sure chip group is initialized
-        if (filterChips == null) return;
+        if (filterChips == null) {
+            filterChips = findViewById(R.id.filterChipGroup);
+            if (filterChips == null) {
+                Log.e("ExcludedActivity", "filterChips is null!");
+                return;
+            }
+        }
 
         // Add filter chips
         Chip allChip = (Chip) getLayoutInflater().inflate(R.layout.item_filter_chip, filterChips, false);
@@ -264,5 +310,14 @@ public class ExcludedTransactionsActivity extends AppCompatActivity {
         if (executorService != null) {
             executorService.shutdown();
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Refresh the badge count on bottom navigation
+        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
+        bottomNav.setSelectedItemId(R.id.nav_excluded); // Change this ID for each activity
     }
 }

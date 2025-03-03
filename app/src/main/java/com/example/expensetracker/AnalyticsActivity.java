@@ -1,5 +1,6 @@
 package com.example.expensetracker;
 
+import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.widget.TextView;
@@ -116,17 +117,20 @@ public class AnalyticsActivity extends AppCompatActivity {
             switch (item.getItemId()) {
                 case R.id.nav_home:
                     startActivity(new android.content.Intent(this, MainActivity.class));
-                    finish();
+//                    finish();
                     return true;
                 case R.id.nav_analytics:
                     return true;
                 case R.id.nav_predictions:
                     startActivity(new android.content.Intent(this, PredictionActivity.class));
-                    finish();
+//                    finish();
                     return true;
                 case R.id.nav_groups:
                     startActivity(new android.content.Intent(this, GroupedExpensesActivity.class));
-                    finish();
+//                    finish();
+                    return true;
+                case R.id.nav_excluded:
+                    startActivity(new Intent(this, ExcludedTransactionsActivity.class));
                     return true;
             }
             return false;
@@ -283,5 +287,14 @@ public class AnalyticsActivity extends AppCompatActivity {
                 getColor(R.color.yellow),
                 getColor(R.color.secondary)
         );
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Refresh the badge count on bottom navigation
+        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
+        bottomNav.setSelectedItemId(R.id.nav_analytics); // Change this ID for each activity
     }
 }

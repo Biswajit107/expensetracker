@@ -46,6 +46,7 @@
             android:layout_height="0dp"
             android:clipToPadding="false"
             android:padding="16dp"
+            android:paddingBottom="72dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintTop_toBottomOf="@id/filterScroll" />
 
@@ -72,7 +73,15 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
+        android:layout_marginBottom="72dp"
         android:contentDescription="Include all transactions"
         app:srcCompat="@drawable/ic_include_all" />
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNavigation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        app:menu="@menu/bottom_nav_menu"/>
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

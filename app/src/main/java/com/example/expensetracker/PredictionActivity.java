@@ -1,5 +1,6 @@
 package com.example.expensetracker;
 
+import android.content.Intent;
 import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
@@ -84,17 +85,20 @@ public class PredictionActivity extends AppCompatActivity {
             switch (item.getItemId()) {
                 case R.id.nav_home:
                     startActivity(new android.content.Intent(this, MainActivity.class));
-                    finish();
+//                    finish();
                     return true;
                 case R.id.nav_analytics:
                     startActivity(new android.content.Intent(this, AnalyticsActivity.class));
-                    finish();
+//                    finish();
                     return true;
                 case R.id.nav_predictions:
                     return true;
                 case R.id.nav_groups:
                     startActivity(new android.content.Intent(this, GroupedExpensesActivity.class));
-                    finish();
+//                    finish();
+                    return true;
+                case R.id.nav_excluded:
+                    startActivity(new Intent(this, ExcludedTransactionsActivity.class));
                     return true;
             }
             return false;
@@ -187,5 +191,14 @@ public class PredictionActivity extends AppCompatActivity {
                 upperBoundSet, lowerBoundSet);
         predictionChart.setData(lineData);
         predictionChart.invalidate();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Refresh the badge count on bottom navigation
+        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
+        bottomNav.setSelectedItemId(R.id.nav_predictions); // Change this ID for each activity
     }
 }

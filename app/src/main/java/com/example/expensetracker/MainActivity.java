@@ -105,7 +105,7 @@ public class MainActivity extends AppCompatActivity {
         checkAndRequestSMSPermissions();
         setupBottomNavigation();
 
-        checkAutoExcludedTransactions();
+        //checkAutoExcludedTransactions();
 
         // Initialize search and sort components
         searchInput = findViewById(R.id.searchInput);
@@ -118,10 +118,10 @@ public class MainActivity extends AppCompatActivity {
         setupSort();
 
         // Your existing ViewModel observer
-        viewModel.getAllTransactions().observe(this, transactions -> {
-            allTransactions = new ArrayList<>(transactions); // Save a copy of all transactions
-            adapter.setTransactions(transactions);
-        });
+//        viewModel.getTransactionsBetweenDates(fromDate,toDate).observe(this, transactions -> {
+//            allTransactions = new ArrayList<>(transactions); // Save a copy of all transactions
+//            adapter.setTransactions(transactions);
+//        });
     }
 
     private void setupSearch() {
@@ -231,6 +231,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupDefaultDates() {
+
+        fromDate = preferencesManager.getFromDate();
+        toDate = preferencesManager.getToDate();
+
         Calendar calendar = Calendar.getInstance();
 
         // Set To Date as current date
@@ -247,6 +251,16 @@ public class MainActivity extends AppCompatActivity {
         fromDate = calendar.getTimeInMillis();
 
         // Update button texts
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
+        ((MaterialButton) findViewById(R.id.fromDateButton)).setText(dateFormat.format(new Date(fromDate)));
+        ((MaterialButton) findViewById(R.id.toDateButton)).setText(dateFormat.format(new Date(toDate)));
+
+        loadExistingSMS();
+
+    }
+
+
+    private void updateDateButtonTexts() {
         SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
         ((MaterialButton) findViewById(R.id.fromDateButton)).setText(dateFormat.format(new Date(fromDate)));
         ((MaterialButton) findViewById(R.id.toDateButton)).setText(dateFormat.format(new Date(toDate)));
@@ -570,19 +584,15 @@ public class MainActivity extends AppCompatActivity {
                     return true;
                 case R.id.nav_analytics:
                     startActivity(new Intent(this, AnalyticsActivity.class));
-                    finish();
                     return true;
                 case R.id.nav_predictions:
                     startActivity(new Intent(this, PredictionActivity.class));
-                    finish();
                     return true;
                 case R.id.nav_groups:
                     startActivity(new Intent(this, GroupedExpensesActivity.class));
-                    finish();
                     return true;
                 case R.id.nav_excluded:
                     startActivity(new Intent(this, ExcludedTransactionsActivity.class));
-                    finish();
                     return true;
             }
             return false;
@@ -618,6 +628,7 @@ public class MainActivity extends AppCompatActivity {
         fromDateButton.setOnClickListener(v -> showDatePicker(true));
         toDateButton.setOnClickListener(v -> showDatePicker(false));
 
+        preferencesManager.saveSelectedDateRange(fromDate, toDate);
         loadMessagesButton.setOnClickListener(v -> {
             if (fromDate == 0 || toDate == 0) {
                 Toast.makeText(this, "Please select both dates", Toast.LENGTH_SHORT).show();
@@ -654,6 +665,8 @@ public class MainActivity extends AppCompatActivity {
                                 .format(new Date(toDate)));
             }
 
+            preferencesManager.saveSelectedDateRange(fromDate, toDate);
+
             // Update transactions for new date range using callback
             viewModel.getTransactionsBetweenDates(fromDate, toDate, transactions -> {
                 if (transactions != null && !transactions.isEmpty()) {
@@ -669,6 +682,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadExistingSMS() {
         Log.d("MainActivity", "Loading SMS between dates: " + new Date(fromDate) + " to " + new Date(toDate));
+
+        preferencesManager.saveSelectedDateRange(fromDate, toDate);
 
         executorService.execute(() -> {
             // First, process new SMS messages
@@ -870,6 +885,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Refresh the badge count on bottom navigation
         BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
+        bottomNav.setSelectedItemId(R.id.nav_home); // Change this ID for each activity
         checkForExcludedTransactions(bottomNav);
     }
 }

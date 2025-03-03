@@ -1,5 +1,6 @@
 package com.example.expensetracker;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -100,17 +101,20 @@ public class GroupedExpensesActivity extends AppCompatActivity implements Groupe
             switch (item.getItemId()) {
                 case R.id.nav_home:
                     startActivity(new android.content.Intent(this, MainActivity.class));
-                    finish();
+//                    finish();
                     return true;
                 case R.id.nav_analytics:
                     startActivity(new android.content.Intent(this, AnalyticsActivity.class));
-                    finish();
+//                    finish();
                     return true;
                 case R.id.nav_predictions:
                     startActivity(new android.content.Intent(this, PredictionActivity.class));
-                    finish();
+//                    finish();
                     return true;
                 case R.id.nav_groups:
+                    return true;
+                case R.id.nav_excluded:
+                    startActivity(new Intent(this, ExcludedTransactionsActivity.class));
                     return true;
             }
             return false;
@@ -142,4 +146,14 @@ public class GroupedExpensesActivity extends AppCompatActivity implements Groupe
         // Notify only that item changed
         adapter.notifyItemChanged(position);
     }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Refresh the badge count on bottom navigation
+        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
+        bottomNav.setSelectedItemId(R.id.nav_groups); // Change this ID for each activity
+    }
+
 }
