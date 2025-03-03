@@ -175,4 +175,9 @@ public class TransactionRepository {
         });
     }
 
+    public List<Transaction> getTransactionsBetweenDatesPaginatedSync(long startDate, long endDate, int limit, int offset) {
+        return transactionDao
+                .getTransactionsBetweenDatesPaginatedSync(startDate, endDate, limit, offset);
+    }
+
 }

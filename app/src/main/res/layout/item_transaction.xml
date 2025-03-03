@@ -5,104 +5,138 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="8dp"
-    app:cardElevation="2dp"
+    app:cardElevation="1dp"
     app:cardCornerRadius="8dp"
-    app:cardBackgroundColor="@color/white"
+    app:strokeWidth="0dp"
     android:foreground="?attr/selectableItemBackground">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="12dp">
+        android:orientation="horizontal">
+
+        <!-- Category color indicator -->
+        <View
+            android:id="@+id/categoryColorIndicator"
+            android:layout_width="4dp"
+            android:layout_height="match_parent"
+            android:visibility="invisible"/>
 
         <LinearLayout
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:padding="12dp">
 
-            <TextView
-                android:id="@+id/dateText"
-                android:layout_width="0dp"
+            <!-- Header row: Date and Bank -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textColor="#616161"
-                android:textSize="14sp"/>
+                android:orientation="horizontal"
+                android:layout_marginBottom="4dp">
 
-            <TextView
-                android:id="@+id/bankText"
-                android:layout_width="wrap_content"
+                <TextView
+                    android:id="@+id/dateText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="#616161"
+                    android:textSize="13sp"/>
+
+                <TextView
+                    android:id="@+id/bankText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="#424242"
+                    android:textStyle="bold"
+                    android:textSize="13sp"/>
+            </LinearLayout>
+
+            <!-- Description and Transaction Type -->
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textColor="#424242"
-                android:textStyle="bold"
-                android:textSize="14sp"/>
+                android:orientation="horizontal"
+                android:layout_marginBottom="4dp">
+
+                <TextView
+                    android:id="@+id/descriptionText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textColor="#212121"
+                    android:textSize="15sp"
+                    android:maxLines="2"
+                    android:ellipsize="end"/>
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/typeChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    app:chipMinHeight="24dp"
+                    android:textSize="11sp"
+                    app:chipBackgroundColor="@color/chip_background"
+                    android:layout_marginStart="4dp"/>
+            </LinearLayout>
+
+            <!-- Category indicator and amount -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/categoryIndicator"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:visibility="gone"
+                    android:layout_gravity="start|center_vertical"
+                    android:background="@drawable/rounded_background"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="2dp"/>
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1"/>
+
+                <TextView
+                    android:id="@+id/amountText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:textStyle="bold"
+                    android:textSize="16sp"/>
+            </LinearLayout>
+
+            <!-- Excluded hint text -->
+            <TextView
+                android:id="@+id/excludedHintText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:gravity="end"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                android:textStyle="italic"
+                android:visibility="gone"/>
+
+            <!-- Other bank indicator -->
+            <TextView
+                android:id="@+id/otherBankIndicator"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textStyle="italic"
+                android:textColor="@color/text_secondary"
+                android:text="Unrecognized source"
+                android:visibility="gone"
+                android:layout_marginTop="4dp"
+                android:drawableStart="@drawable/ic_warning_small"
+                android:drawablePadding="4dp"/>
         </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-
-            <TextView
-                android:id="@+id/descriptionText"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:textColor="#757575"
-                android:textSize="15sp"/>
-
-            <com.google.android.material.chip.Chip
-                android:id="@+id/typeChip"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                app:chipBackgroundColor="@color/chip_background"
-                app:chipMinHeight="24dp"
-                android:textSize="12sp"/>
-        </LinearLayout>
-
-        <!-- New: Indicator for "OTHER" bank transactions -->
-        <TextView
-            android:id="@+id/otherBankIndicator"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="12sp"
-            android:textStyle="italic"
-            android:textColor="@color/text_secondary"
-            android:text="Unrecognized source"
-            android:visibility="gone"
-            android:layout_marginBottom="4dp"
-            android:drawableStart="@drawable/ic_warning_small"
-            android:drawablePadding="4dp"/>
-
-        <TextView
-            android:id="@+id/amountText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="end"
-            android:textStyle="bold"
-            android:textSize="16sp"/>
-        <!-- Excluded hint text -->
-        <TextView
-            android:id="@+id/excludedHintText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="end"
-            android:textSize="12sp"
-            android:textColor="@color/text_secondary"
-            android:textStyle="italic"
-            android:visibility="gone"/>
-
-        <!-- Category indicator (shown if category is set) -->
-        <TextView
-            android:id="@+id/categoryIndicator"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="end"
-            android:textSize="12sp"
-            android:textColor="@color/text_secondary"
-            android:textStyle="italic"
-            android:visibility="gone"/>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

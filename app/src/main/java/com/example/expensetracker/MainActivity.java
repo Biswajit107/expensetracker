@@ -1,5 +1,6 @@
 package com.example.expensetracker;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -11,7 +12,9 @@ import android.Manifest;
 import android.app.DatePickerDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.database.Cursor;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -42,9 +45,21 @@ import com.example.expensetracker.repository.TransactionRepository;
 import com.example.expensetracker.utils.TransactionSearchSortUtil;
 import com.example.expensetracker.viewmodel.TransactionViewModel;
 import com.example.expensetracker.utils.PreferencesManager;
+import com.github.mikephil.charting.charts.LineChart;
+import com.github.mikephil.charting.components.XAxis;
+import com.github.mikephil.charting.components.YAxis;
+import com.github.mikephil.charting.data.Entry;
+import com.github.mikephil.charting.data.LineData;
+import com.github.mikephil.charting.data.LineDataSet;
+import com.github.mikephil.charting.formatter.IndexAxisValueFormatter;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
+import com.google.android.material.textfield.TextInputEditText;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -53,6 +68,8 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import android.widget.AutoCompleteTextView;
@@ -86,6 +103,11 @@ public class MainActivity extends AppCompatActivity {
     private Button sortButton;
     private List<Transaction> allTransactions = new ArrayList<>();
 
+    private static final int PAGE_SIZE = 25;
+    private int currentPage = 0;
+    private boolean isLoading = false;
+    private boolean hasMoreData = true;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -95,7 +117,14 @@ public class MainActivity extends AppCompatActivity {
         executorService = Executors.newSingleThreadExecutor();
 
         initializeViews();
-        setupSpinners();
+        // Set up new components
+        setupPagination();
+        setupSpendingChart();
+        setupDateRangeChips();
+        setupCategoryFilter();
+        setupBudgetFab();
+
+//        setupSpinners();
         setupRecyclerView();
         setupViewModel();
 
@@ -139,6 +168,459 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void setupPagination() {
+        RecyclerView recyclerView = findViewById(R.id.recyclerView);
+        recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                super.onScrolled(recyclerView, dx, dy);
+
+                LinearLayoutManager layoutManager = (LinearLayoutManager) recyclerView.getLayoutManager();
+                int visibleItemCount = layoutManager.getChildCount();
+                int totalItemCount = layoutManager.getItemCount();
+                int firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition();
+
+                if (!isLoading && hasMoreData) {
+                    if ((visibleItemCount + firstVisibleItemPosition) >= totalItemCount
+                            && firstVisibleItemPosition >= 0
+                            && totalItemCount >= PAGE_SIZE) {
+                        // Load more data
+                        loadMoreTransactions();
+                    }
+                }
+            }
+        });
+    }
+
+    private void loadMoreTransactions() {
+        isLoading = true;
+
+        // Show loading indicator (add a ProgressBar at the bottom of RecyclerView)
+        // adapter.showLoadingIndicator();
+
+        executorService.execute(() -> {
+            int offset = currentPage * PAGE_SIZE;
+            List<Transaction> nextPageTransactions = viewModel.getTransactionsBetweenDatesPaginatedSync(
+                    fromDate, toDate, PAGE_SIZE, offset);
+
+            // If we got less items than PAGE_SIZE, we've reached the end
+            hasMoreData = nextPageTransactions.size() == PAGE_SIZE;
+
+            runOnUiThread(() -> {
+                // Hide loading indicator
+                // adapter.hideLoadingIndicator();
+
+                // Add new items to adapter
+                adapter.addTransactions(nextPageTransactions);
+                currentPage++;
+                isLoading = false;
+            });
+        });
+    }
+
+    // Add this method to MainActivity.java
+    private void setupCategoryFilter() {
+        ChipGroup categoryFilterChipGroup = findViewById(R.id.categoryFilterChipGroup);
+
+        // Clear any existing chips
+        categoryFilterChipGroup.removeAllViews();
+
+        // Add "All Categories" chip
+        Chip allCategoriesChip = new Chip(this);
+        allCategoriesChip.setText("All Categories");
+        allCategoriesChip.setCheckable(true);
+        allCategoriesChip.setChecked(true); // Selected by default
+        categoryFilterChipGroup.addView(allCategoriesChip);
+
+        // Get all categories from Transaction class
+        String[] categories = Transaction.Categories.getAllCategories();
+
+        // Add a chip for each category
+        for (String category : categories) {
+            Chip chip = new Chip(this);
+            chip.setText(category);
+            chip.setCheckable(true);
+
+            // Set chip color based on category
+            int categoryColor = getCategoryColor(category);
+            int textColor = getContrastColor(categoryColor);
+
+            chip.setChipBackgroundColor(ColorStateList.valueOf(categoryColor));
+            chip.setTextColor(textColor);
+
+            categoryFilterChipGroup.addView(chip);
+        }
+
+        // Set listener for chip selection
+        categoryFilterChipGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            // Find which chip is selected
+            if (checkedId == View.NO_ID) {
+                // No chip selected, show all categories
+                filterTransactionsByCategory(null);
+                return;
+            }
+
+            Chip selectedChip = findViewById(checkedId);
+            if (selectedChip != null) {
+                String selectedCategory = selectedChip.getText().toString();
+
+                // If "All Categories" is selected, don't filter by category
+                if ("All Categories".equals(selectedCategory)) {
+                    filterTransactionsByCategory(null);
+                } else {
+                    filterTransactionsByCategory(selectedCategory);
+                }
+            }
+        });
+    }
+
+    private void filterTransactionsByCategory(String category) {
+        // Apply category filter to current transaction list
+        if (category == null) {
+            // Show all transactions (subject to other filters)
+            updateTransactionsList();
+        } else {
+            // Show only transactions in the selected category
+            viewModel.getTransactionsBetweenDates(fromDate, toDate, allTransactions -> {
+                if (allTransactions == null) return;
+
+                List<Transaction> filteredTransactions = new ArrayList<>();
+
+                // Apply bank and type filters if set
+                String selectedBank = bankSpinner.getText().toString();
+                String selectedType = typeSpinner.getText().toString();
+
+                for (Transaction transaction : allTransactions) {
+                    // Check if transaction matches category
+                    if (category.equals(transaction.getCategory())) {
+                        // Apply other filters
+                        boolean bankMatch = selectedBank.equals("All Banks") ||
+                                selectedBank.equals(transaction.getBank());
+                        boolean typeMatch = selectedType.equals("All Types") ||
+                                selectedType.equals(transaction.getType());
+
+                        if (bankMatch && typeMatch) {
+                            filteredTransactions.add(transaction);
+                        }
+                    }
+                }
+
+                // Update adapter and UI
+                adapter.setTransactions(filteredTransactions);
+                updateSummary(filteredTransactions);
+
+                // Show filter indicator
+                filterIndicatorContainer.setVisibility(View.VISIBLE);
+                filterIndicator.setText("Filtered by category: " + category);
+                resultCount.setText(String.format(Locale.getDefault(),
+                        "%d transaction(s) found",
+                        filteredTransactions.size()));
+            });
+        }
+    }
+
+    // Helper method to get category color
+    private int getCategoryColor(String category) {
+        switch (category) {
+            case Transaction.Categories.FOOD:
+                return getColor(R.color.category_food);
+            case Transaction.Categories.SHOPPING:
+                return getColor(R.color.category_shopping);
+            case Transaction.Categories.BILLS:
+                return getColor(R.color.category_bills);
+            case Transaction.Categories.ENTERTAINMENT:
+                return getColor(R.color.category_entertainment);
+            case Transaction.Categories.TRANSPORT:
+                return getColor(R.color.category_transport);
+            case Transaction.Categories.HEALTH:
+                return getColor(R.color.category_health);
+            case Transaction.Categories.EDUCATION:
+                return getColor(R.color.category_education);
+            default:
+                return getColor(R.color.text_secondary);
+        }
+    }
+
+    // Helper method to determine contrasting text color (white or black) based on background color
+    private int getContrastColor(int backgroundColor) {
+        // Extract the red, green, and blue components
+        int red = Color.red(backgroundColor);
+        int green = Color.green(backgroundColor);
+        int blue = Color.blue(backgroundColor);
+
+        // Calculate luminance (simplified formula)
+        double luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+
+        // Use white text on dark backgrounds, black text on light backgrounds
+        return luminance > 0.5 ? Color.BLACK : Color.WHITE;
+    }
+
+    private void resetPagination() {
+        currentPage = 0;
+        hasMoreData = true;
+        adapter.clearTransactions();
+        loadMoreTransactions();
+    }
+
+    // Add this method to MainActivity.java
+    private void setupDateRangeChips() {
+        ChipGroup dateRangeChipGroup = findViewById(R.id.dateRangeChipGroup);
+
+        // Setup click listeners for each chip
+        findViewById(R.id.chipToday).setOnClickListener(v -> {
+            setDateRangeToday();
+            // Clear any previous chip selections if this was unselected
+            if (!((Chip)v).isChecked()) {
+                dateRangeChipGroup.clearCheck();
+            }
+        });
+
+        findViewById(R.id.chipYesterday).setOnClickListener(v -> {
+            setDateRangeYesterday();
+            if (!((Chip)v).isChecked()) {
+                dateRangeChipGroup.clearCheck();
+            }
+        });
+
+        findViewById(R.id.chipThisWeek).setOnClickListener(v -> {
+            setDateRangeThisWeek();
+            if (!((Chip)v).isChecked()) {
+                dateRangeChipGroup.clearCheck();
+            }
+        });
+
+        findViewById(R.id.chipThisMonth).setOnClickListener(v -> {
+            setDateRangeThisMonth();
+            if (!((Chip)v).isChecked()) {
+                dateRangeChipGroup.clearCheck();
+            }
+        });
+
+        findViewById(R.id.chipLast3Months).setOnClickListener(v -> {
+            setDateRangeLast3Months();
+            if (!((Chip)v).isChecked()) {
+                dateRangeChipGroup.clearCheck();
+            }
+        });
+    }
+
+    private void setDateRangeToday() {
+        // Set date range to today
+        Calendar cal = Calendar.getInstance();
+
+        // End of today
+        cal.set(Calendar.HOUR_OF_DAY, 23);
+        cal.set(Calendar.MINUTE, 59);
+        cal.set(Calendar.SECOND, 59);
+        cal.set(Calendar.MILLISECOND, 999);
+        toDate = cal.getTimeInMillis();
+
+        // Start of today
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        fromDate = cal.getTimeInMillis();
+
+        updateDateButtonTexts();
+        resetPagination();
+    }
+
+    private void setDateRangeYesterday() {
+        // Set date range to yesterday
+        Calendar cal = Calendar.getInstance();
+        cal.add(Calendar.DAY_OF_YEAR, -1);
+
+        // End of yesterday
+        cal.set(Calendar.HOUR_OF_DAY, 23);
+        cal.set(Calendar.MINUTE, 59);
+        cal.set(Calendar.SECOND, 59);
+        cal.set(Calendar.MILLISECOND, 999);
+        toDate = cal.getTimeInMillis();
+
+        // Start of yesterday
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        fromDate = cal.getTimeInMillis();
+
+        updateDateButtonTexts();
+        resetPagination();
+    }
+
+    private void setDateRangeThisWeek() {
+        // Set date range to this week (Sunday to today)
+        Calendar cal = Calendar.getInstance();
+
+        // End of today
+        cal.set(Calendar.HOUR_OF_DAY, 23);
+        cal.set(Calendar.MINUTE, 59);
+        cal.set(Calendar.SECOND, 59);
+        cal.set(Calendar.MILLISECOND, 999);
+        toDate = cal.getTimeInMillis();
+
+        // Start of this week (Sunday)
+        cal.set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY);
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        fromDate = cal.getTimeInMillis();
+
+        updateDateButtonTexts();
+        resetPagination();
+    }
+
+    private void setDateRangeThisMonth() {
+        // Set date range to this month
+        Calendar cal = Calendar.getInstance();
+
+        // End of today
+        cal.set(Calendar.HOUR_OF_DAY, 23);
+        cal.set(Calendar.MINUTE, 59);
+        cal.set(Calendar.SECOND, 59);
+        cal.set(Calendar.MILLISECOND, 999);
+        toDate = cal.getTimeInMillis();
+
+        // Start of this month
+        cal.set(Calendar.DAY_OF_MONTH, 1);
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        fromDate = cal.getTimeInMillis();
+
+        updateDateButtonTexts();
+        resetPagination();
+    }
+
+    private void setDateRangeLast3Months() {
+        // Set date range to last 3 months
+        Calendar cal = Calendar.getInstance();
+
+        // End of today
+        cal.set(Calendar.HOUR_OF_DAY, 23);
+        cal.set(Calendar.MINUTE, 59);
+        cal.set(Calendar.SECOND, 59);
+        cal.set(Calendar.MILLISECOND, 999);
+        toDate = cal.getTimeInMillis();
+
+        // Start of 3 months ago
+        cal.add(Calendar.MONTH, -3);
+        cal.set(Calendar.DAY_OF_MONTH, 1);
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        fromDate = cal.getTimeInMillis();
+
+        updateDateButtonTexts();
+        resetPagination();
+    }
+
+    private void setupBudgetFab() {
+        FloatingActionButton setBudgetFab = findViewById(R.id.setBudgetFab);
+        setBudgetFab.setOnClickListener(v -> {
+            showBudgetDialog();
+        });
+    }
+
+    private void showBudgetDialog() {
+        // Create dialog
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_budget_management, null);
+        builder.setView(dialogView);
+
+        // Get references to views
+        TextInputEditText budgetInput = dialogView.findViewById(R.id.budgetAmountInput);
+        LinearProgressIndicator progressBar = dialogView.findViewById(R.id.budgetProgressBar);
+        TextView spentText = dialogView.findViewById(R.id.spentAmountText);
+        TextView remainingText = dialogView.findViewById(R.id.remainingAmountText);
+        Button cancelButton = dialogView.findViewById(R.id.cancelBudgetButton);
+        Button saveButton = dialogView.findViewById(R.id.saveBudgetButton);
+
+        // Get current budget and expenses
+        double currentBudget = 0;
+        try {
+            currentBudget = viewModel.getBudget().getValue();
+            budgetInput.setText(String.valueOf(currentBudget));
+        } catch (Exception e) {
+            budgetInput.setText("");
+        }
+
+        // Calculate current month's expenses
+        Calendar cal = Calendar.getInstance();
+        // End of today
+        cal.set(Calendar.HOUR_OF_DAY, 23);
+        cal.set(Calendar.MINUTE, 59);
+        cal.set(Calendar.SECOND, 59);
+        long endDate = cal.getTimeInMillis();
+
+        // Start of this month
+        cal.set(Calendar.DAY_OF_MONTH, 1);
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        long startDate = cal.getTimeInMillis();
+
+        final double finalCurrentBudget = currentBudget;
+
+        viewModel.getTransactionsBetweenDates(startDate, endDate, transactions -> {
+            if (transactions == null) return;
+
+            double totalExpenses = 0;
+            for (Transaction transaction : transactions) {
+                if ("DEBIT".equals(transaction.getType()) && !transaction.isExcludedFromTotal()) {
+                    totalExpenses += transaction.getAmount();
+                }
+            }
+
+            // Update UI with current expenses
+            double spent = totalExpenses;
+            double remaining = finalCurrentBudget - spent;
+            int progressPercentage = finalCurrentBudget > 0 ? (int)((spent / finalCurrentBudget) * 100) : 0;
+
+            // Show current status
+            spentText.setText(String.format(Locale.getDefault(), "Spent: ₹%.2f", spent));
+            remainingText.setText(String.format(Locale.getDefault(), "Remaining: ₹%.2f", remaining));
+            progressBar.setProgress(progressPercentage);
+
+            // Set progress bar color based on percentage
+            if (progressPercentage > 90) {
+                progressBar.setIndicatorColor(getColor(R.color.red));
+            } else if (progressPercentage > 75) {
+                progressBar.setIndicatorColor(getColor(R.color.yellow));
+            } else {
+                progressBar.setIndicatorColor(getColor(R.color.green));
+            }
+        });
+
+        // Create and show dialog
+        AlertDialog dialog = builder.create();
+
+        // Set up button click listeners
+        cancelButton.setOnClickListener(v -> {
+            dialog.dismiss();
+        });
+
+        saveButton.setOnClickListener(v -> {
+            // Save new budget
+            try {
+                double newBudget = Double.parseDouble(budgetInput.getText().toString());
+                viewModel.setBudget(newBudget);
+                Toast.makeText(this, "Budget updated", Toast.LENGTH_SHORT).show();
+            } catch (NumberFormatException e) {
+                Toast.makeText(this, "Please enter a valid amount", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            dialog.dismiss();
+        });
+
+        dialog.show();
+    }
+
     private void filterTransactions(String query) {
         if (query.isEmpty()) {
             // If search is empty, show all transactions
@@ -165,6 +647,128 @@ public class MainActivity extends AppCompatActivity {
 
             adapter.setTransactions(filteredList);
         }
+    }
+
+    // Add this method to MainActivity.java
+    private void setupSpendingChart() {
+        LineChart spendingLineChart = findViewById(R.id.spendingLineChart);
+
+        // Configure chart appearance
+        spendingLineChart.getDescription().setEnabled(false);
+        spendingLineChart.setDrawGridBackground(false);
+        spendingLineChart.getAxisRight().setEnabled(false);
+
+        XAxis xAxis = spendingLineChart.getXAxis();
+        xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
+        xAxis.setGranularity(1f);
+        xAxis.setGranularityEnabled(true);
+
+        YAxis leftAxis = spendingLineChart.getAxisLeft();
+        leftAxis.setDrawZeroLine(true);
+
+        // Enable touch gestures
+        spendingLineChart.setTouchEnabled(true);
+        spendingLineChart.setDragEnabled(true);
+        spendingLineChart.setScaleEnabled(true);
+
+        // Load data for the chart
+        updateSpendingChart();
+    }
+
+    private void updateSpendingChart() {
+        LineChart spendingLineChart = findViewById(R.id.spendingLineChart);
+
+        // Start date is beginning of selected date range or 30 days ago if range is larger
+        long chartEndDate = toDate;
+        long chartStartDateInt = fromDate;
+
+        // If date range is more than 30 days, limit to last 30 days for better visualization
+        long thirtyDaysInMillis = 30 * 24 * 60 * 60 * 1000L;
+        if (toDate - fromDate > thirtyDaysInMillis) {
+            chartStartDateInt = toDate - thirtyDaysInMillis;
+        }
+        long chartStartDate = chartStartDateInt;
+
+
+        // Get transactions for chart date range
+        executorService.execute(() -> {
+            List<Transaction> chartTransactions = TransactionDatabase.getInstance(this)
+                    .transactionDao()
+                    .getTransactionsBetweenDatesSync(chartStartDate, chartEndDate);
+
+            // Group transactions by day
+            Map<Long, Float> dailySpending = new TreeMap<>();
+            SimpleDateFormat dateKeyFormat = new SimpleDateFormat("yyyyMMdd", Locale.getDefault());
+            SimpleDateFormat dateLabelFormat = new SimpleDateFormat("dd MMM", Locale.getDefault());
+            List<String> dateLabels = new ArrayList<>();
+
+            // Process transactions
+            for (Transaction transaction : chartTransactions) {
+                if ("DEBIT".equals(transaction.getType()) && !transaction.isExcludedFromTotal()) {
+                    // Get day key by stripping time component
+                    Calendar cal = Calendar.getInstance();
+                    cal.setTimeInMillis(transaction.getDate());
+                    cal.set(Calendar.HOUR_OF_DAY, 0);
+                    cal.set(Calendar.MINUTE, 0);
+                    cal.set(Calendar.SECOND, 0);
+                    cal.set(Calendar.MILLISECOND, 0);
+                    long dayKey = cal.getTimeInMillis();
+
+                    // Add to daily total
+                    float currentAmount = dailySpending.getOrDefault(dayKey, 0f);
+                    dailySpending.put(dayKey, currentAmount + (float)transaction.getAmount());
+
+                    // Add date label if not already present
+                    String label = dateLabelFormat.format(new Date(dayKey));
+                    if (!dateLabels.contains(label)) {
+                        dateLabels.add(label);
+                    }
+                }
+            }
+
+            // Create chart entries
+            List<Entry> entries = new ArrayList<>();
+            int index = 0;
+            for (Map.Entry<Long, Float> entry : dailySpending.entrySet()) {
+                entries.add(new Entry(index++, entry.getValue()));
+            }
+
+            // Update chart on UI thread
+            runOnUiThread(() -> {
+                if (entries.isEmpty()) {
+                    // No data to display
+                    spendingLineChart.setNoDataText("No spending data available");
+                    spendingLineChart.invalidate();
+                    return;
+                }
+
+                // Create dataset
+                LineDataSet dataSet = new LineDataSet(entries, "Daily Spending");
+                dataSet.setColor(getColor(R.color.primary));
+                dataSet.setLineWidth(2f);
+                dataSet.setCircleColor(getColor(R.color.primary));
+                dataSet.setCircleRadius(4f);
+                dataSet.setDrawValues(false);
+                dataSet.setMode(LineDataSet.Mode.CUBIC_BEZIER); // Smooth curve
+
+                // Enable fill color
+                dataSet.setDrawFilled(true);
+                dataSet.setFillColor(getColor(R.color.primary));
+
+                // Create line data and set to chart
+                LineData lineData = new LineData(dataSet);
+                spendingLineChart.setData(lineData);
+
+                // Set X-axis labels
+                XAxis xAxis = spendingLineChart.getXAxis();
+                xAxis.setValueFormatter(new IndexAxisValueFormatter(dateLabels));
+                xAxis.setLabelCount(Math.min(dateLabels.size(), 5));
+
+                // Refresh chart
+                spendingLineChart.invalidate();
+                spendingLineChart.animateX(1000);
+            });
+        });
     }
 
     private void setupSort() {
@@ -270,7 +874,7 @@ public class MainActivity extends AppCompatActivity {
         // Find AutoCompleteTextViews instead of Spinners
         bankSpinner = findViewById(R.id.bankSpinner);
         typeSpinner = findViewById(R.id.typeSpinner);
-        budgetInput = findViewById(R.id.budgetInput);
+//        budgetInput = findViewById(R.id.budgetInput);
         totalDebitsText = findViewById(R.id.totalDebitsText);
         totalCreditsText = findViewById(R.id.totalCreditsText);
         balanceText = findViewById(R.id.balanceText);
@@ -282,28 +886,30 @@ public class MainActivity extends AppCompatActivity {
         clearFilterButton = findViewById(R.id.clearFilterButton);
         resultCount = findViewById(R.id.resultCount);
 
-        // Rest of the method remains the same
-        budgetInput.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {}
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                try {
-                    // Parse the budget value
-                    double budget = s.toString().isEmpty() ? 0 : Double.parseDouble(s.toString());
-
-                    // Directly set the budget in ViewModel
-                    viewModel.setBudget(budget);
-                } catch (NumberFormatException e) {
-                    // Handle invalid input
-                    viewModel.setBudget(0.0);
-                }
-            }
-        });
+//        budgetInput = findViewById(R.id.budgetAmountInput);
+//
+//        // Rest of the method remains the same
+//        budgetInput.addTextChangedListener(new TextWatcher() {
+//            @Override
+//            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+//
+//            @Override
+//            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+//
+//            @Override
+//            public void afterTextChanged(Editable s) {
+//                try {
+//                    // Parse the budget value
+//                    double budget = s.toString().isEmpty() ? 0 : Double.parseDouble(s.toString());
+//
+//                    // Directly set the budget in ViewModel
+//                    viewModel.setBudget(budget);
+//                } catch (NumberFormatException e) {
+//                    // Handle invalid input
+//                    viewModel.setBudget(0.0);
+//                }
+//            }
+//        });
 
         // Set default filter indicator visibility
         if (filterIndicatorContainer != null) {

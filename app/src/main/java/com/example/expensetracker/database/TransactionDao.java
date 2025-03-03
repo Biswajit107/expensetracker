@@ -244,4 +244,8 @@ public interface TransactionDao {
      */
     @Query("UPDATE transactions SET is_excluded_from_total = 0 WHERE is_excluded_from_total = 1")
     int includeAllExcludedTransactions();
+
+    @Query("SELECT * FROM transactions WHERE date BETWEEN :startDate AND :endDate ORDER BY date DESC LIMIT :limit OFFSET :offset")
+    List<Transaction> getTransactionsBetweenDatesPaginatedSync(long startDate, long endDate, int limit, int offset);
+
 }
