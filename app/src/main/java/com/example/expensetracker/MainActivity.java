@@ -100,6 +100,7 @@ public class MainActivity extends AppCompatActivity {
     private int currentPage = 0;
     private boolean isLoading = false;
     private boolean hasMoreData = true;
+    private FilterState currentFilterState = new FilterState();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -222,12 +223,35 @@ public class MainActivity extends AppCompatActivity {
             // Update the transaction in the database
             viewModel.updateTransaction(editedTransaction);
 
-            // Refresh the transactions list
-            updateTransactionsList();
+            // Instead of calling updateTransactionsList() which resets filters,
+            // we'll just update the transaction in our local lists and adapter
+            updateTransactionInLists(editedTransaction);
         });
 
         // Show the dialog
         dialog.show(getSupportFragmentManager(), "edit_transaction");
+    }
+
+    private void updateTransactionInLists(Transaction editedTransaction) {
+        // Update in allTransactions
+        for (int i = 0; i < allTransactions.size(); i++) {
+            if (allTransactions.get(i).getId() == editedTransaction.getId()) {
+                allTransactions.set(i, editedTransaction);
+                break;
+            }
+        }
+
+        // Apply current filters to get the updated list
+        List<Transaction> filteredList = currentFilterState.applyFilters(allTransactions);
+
+        // Update the adapter with the properly filtered list
+        adapter.setTransactions(filteredList);
+
+        // Update the summary
+        updateSummary(filteredList);
+
+        // Show a confirmation
+        Toast.makeText(this, "Transaction updated", Toast.LENGTH_SHORT).show();
     }
 
     private void setupPagination() {
@@ -330,40 +354,27 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void filterTransactions(String query) {
-        if (query.isEmpty()) {
-            // If search is empty, show all transactions
-            adapter.setTransactions(allTransactions);
-        } else {
-            // Filter transactions based on query
-            List<Transaction> filteredList = new ArrayList<>();
-            String lowerQuery = query.toLowerCase();
+        // Update filter state
+        currentFilterState.searchQuery = query;
 
-            for (Transaction transaction : allTransactions) {
-                if ((transaction.getDescription() != null &&
-                        transaction.getDescription().toLowerCase().contains(lowerQuery)) ||
-                        (transaction.getBank() != null &&
-                                transaction.getBank().toLowerCase().contains(lowerQuery)) ||
-                        (transaction.getCategory() != null &&
-                                transaction.getCategory().toLowerCase().contains(lowerQuery)) ||
-                        (transaction.getMerchantName() != null &&
-                                transaction.getMerchantName().toLowerCase().contains(lowerQuery)) ||
-                        String.valueOf(transaction.getAmount()).contains(lowerQuery)) {
+        // Apply filters to allTransactions
+        List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
 
-                    filteredList.add(transaction);
-                }
-            }
+        // Update adapter
+        adapter.setTransactions(filteredTransactions);
 
-            adapter.setTransactions(filteredList);
-
-            // Update filter indicator
-            if (filterIndicatorContainer != null) {
+        // Update filter indicator
+        if (filterIndicatorContainer != null) {
+            if (!query.isEmpty()) {
                 filterIndicatorContainer.setVisibility(View.VISIBLE);
                 filterIndicator.setText("Search: " + query);
 
                 if (resultCount != null) {
                     resultCount.setText(String.format(Locale.getDefault(),
-                            "%d transaction(s) found", filteredList.size()));
+                            "%d transaction(s) found", filteredTransactions.size()));
                 }
+            } else if (!currentFilterState.isAnyFilterActive()) {
+                filterIndicatorContainer.setVisibility(View.GONE);
             }
         }
     }
@@ -395,45 +406,46 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void sortTransactions(int sortOption) {
-        // Get current list (might be filtered by search)
-        List<Transaction> currentList = new ArrayList<>(adapter.getTransactions());
+        // Update filter state
+        currentFilterState.sortOption = sortOption;
 
+        // Get current list and apply sort
+        List<Transaction> currentList = new ArrayList<>(adapter.getTransactions());
+        sortTransactions(currentList, sortOption);
+
+        // Update adapter with sorted list
+        adapter.setTransactions(currentList);
+    }
+
+    private static void sortTransactions(List<Transaction> transactions, int sortOption) {
         switch (sortOption) {
             case 0: // Date (newest first)
-                Collections.sort(currentList, (a, b) -> Long.compare(b.getDate(), a.getDate()));
+                Collections.sort(transactions, (a, b) -> Long.compare(b.getDate(), a.getDate()));
                 break;
-
             case 1: // Date (oldest first)
-                Collections.sort(currentList, (a, b) -> Long.compare(a.getDate(), b.getDate()));
+                Collections.sort(transactions, (a, b) -> Long.compare(a.getDate(), b.getDate()));
                 break;
-
             case 2: // Amount (highest first)
-                Collections.sort(currentList, (a, b) -> Double.compare(b.getAmount(), a.getAmount()));
+                Collections.sort(transactions, (a, b) -> Double.compare(b.getAmount(), a.getAmount()));
                 break;
-
             case 3: // Amount (lowest first)
-                Collections.sort(currentList, (a, b) -> Double.compare(a.getAmount(), b.getAmount()));
+                Collections.sort(transactions, (a, b) -> Double.compare(a.getAmount(), b.getAmount()));
                 break;
-
             case 4: // Description (A-Z)
-                Collections.sort(currentList, (a, b) -> {
+                Collections.sort(transactions, (a, b) -> {
                     String descA = a.getDescription() != null ? a.getDescription() : "";
                     String descB = b.getDescription() != null ? b.getDescription() : "";
                     return descA.compareToIgnoreCase(descB);
                 });
                 break;
-
             case 5: // Description (Z-A)
-                Collections.sort(currentList, (a, b) -> {
+                Collections.sort(transactions, (a, b) -> {
                     String descA = a.getDescription() != null ? a.getDescription() : "";
                     String descB = b.getDescription() != null ? b.getDescription() : "";
                     return descB.compareToIgnoreCase(descA);
                 });
                 break;
         }
-
-        // Update adapter with sorted list
-        adapter.setTransactions(currentList);
     }
 
     private void setupCategoryFilter() {
@@ -496,27 +508,19 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void filterTransactionsByCategory(String category) {
-        // Apply category filter to current transaction list
-        if (category == null) {
-            // Show all transactions (subject to other filters)
-            updateTransactionsList();
-        } else {
-            // Show only transactions in the selected category
-            List<Transaction> filteredTransactions = new ArrayList<>();
+        // Update filter state
+        currentFilterState.category = category;
 
-            for (Transaction transaction : allTransactions) {
-                // Check if transaction matches category
-                if (category.equals(transaction.getCategory())) {
-                    filteredTransactions.add(transaction);
-                }
-            }
+        // Apply filters to allTransactions
+        List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
 
-            // Update adapter and UI
-            adapter.setTransactions(filteredTransactions);
-            updateSummary(filteredTransactions);
+        // Update adapter and UI
+        adapter.setTransactions(filteredTransactions);
+        updateSummary(filteredTransactions);
 
-            // Show filter indicator
-            if (filterIndicatorContainer != null) {
+        // Show filter indicator
+        if (filterIndicatorContainer != null) {
+            if (category != null && !category.isEmpty()) {
                 filterIndicatorContainer.setVisibility(View.VISIBLE);
                 filterIndicator.setText("Filtered by category: " + category);
 
@@ -524,6 +528,8 @@ public class MainActivity extends AppCompatActivity {
                     resultCount.setText(String.format(Locale.getDefault(),
                             "%d transaction(s) found", filteredTransactions.size()));
                 }
+            } else if (!currentFilterState.isAnyFilterActive()) {
+                filterIndicatorContainer.setVisibility(View.GONE);
             }
         }
     }
@@ -1074,28 +1080,23 @@ public class MainActivity extends AppCompatActivity {
 
     // Fix for applyAdvancedFilters method
     private void applyAdvancedFilters(String bank, String type, String category, double minAmount, double maxAmount) {
-        viewModel.getTransactionsBetweenDates(fromDate, toDate, transactions -> {
-            if (transactions == null) return;
+        // Update filter state
+        currentFilterState.bank = bank;
+        currentFilterState.type = type;
+        currentFilterState.category = category;
+        currentFilterState.minAmount = minAmount;
+        currentFilterState.maxAmount = maxAmount;
 
-            List<Transaction> filteredTransactions = new ArrayList<>();
+        // Apply filters to allTransactions
+        List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
 
-            for (Transaction transaction : transactions) {
-                boolean bankMatch = "All Banks".equals(bank) || bank.equals(transaction.getBank());
-                boolean typeMatch = "All Types".equals(type) || type.equals(transaction.getType());
-                boolean categoryMatch = category == null || category.isEmpty() || category.equals(transaction.getCategory());
-                boolean amountMatch = transaction.getAmount() >= minAmount && transaction.getAmount() <= maxAmount;
+        // Update UI
+        adapter.setTransactions(filteredTransactions);
+        updateSummary(filteredTransactions);
 
-                if (bankMatch && typeMatch && categoryMatch && amountMatch) {
-                    filteredTransactions.add(transaction);
-                }
-            }
-
-            // Update UI
-            adapter.setTransactions(filteredTransactions);
-            updateSummary(filteredTransactions);
-
-            // Show filter indicator
-            if (filterIndicatorContainer != null) {
+        // Show filter indicator
+        if (filterIndicatorContainer != null) {
+            if (currentFilterState.isAnyFilterActive()) {
                 filterIndicatorContainer.setVisibility(View.VISIBLE);
 
                 // Prepare filter description
@@ -1122,18 +1123,18 @@ public class MainActivity extends AppCompatActivity {
                 if (minAmount > 0 || maxAmount < 100000) {
                     if (hasFilter) filterDesc.append(", ");
                     filterDesc.append("Amount ₹").append((int)minAmount).append("-₹").append((int)maxAmount);
-                    hasFilter = true;
-                }
-
-                if (!hasFilter) {
-                    filterDesc = new StringBuilder("No filters applied");
                 }
 
                 filterIndicator.setText(filterDesc.toString());
+            } else {
+                filterIndicatorContainer.setVisibility(View.GONE);
+            }
+
+            if (resultCount != null) {
                 resultCount.setText(String.format(Locale.getDefault(),
                         "%d transaction(s) found", filteredTransactions.size()));
             }
-        });
+        }
     }
 
     private void updateTransactionsList() {
@@ -1508,6 +1509,111 @@ public class MainActivity extends AppCompatActivity {
         // Shutdown the ExecutorService
         if (executorService != null) {
             executorService.shutdown();
+        }
+    }
+
+    private static class FilterState {
+        private String bank = "All Banks";
+        private String type = "All Types";
+        private String category = null;
+        private String searchQuery = "";
+        private double minAmount = 0;
+        private double maxAmount = 100000;
+        private boolean showingExcluded = false;
+        private int sortOption = 0; // 0 = Date (newest first)
+
+        // Returns true if any filter is active
+        public boolean isAnyFilterActive() {
+            return !bank.equals("All Banks") ||
+                    !type.equals("All Types") ||
+                    category != null ||
+                    !searchQuery.isEmpty() ||
+                    minAmount > 0 ||
+                    maxAmount < 100000;
+        }
+
+        // Apply the current filters to a list of transactions
+        public List<Transaction> applyFilters(List<Transaction> transactions) {
+            if (transactions == null) return new ArrayList<>();
+
+            List<Transaction> result = new ArrayList<>();
+
+            for (Transaction transaction : transactions) {
+                boolean shouldInclude = true;
+
+                // Apply bank filter
+                if (!bank.equals("All Banks") && !bank.equals(transaction.getBank())) {
+                    shouldInclude = false;
+                }
+
+                // Apply type filter
+                if (shouldInclude && !type.equals("All Types") && !type.equals(transaction.getType())) {
+                    shouldInclude = false;
+                }
+
+                // Apply category filter
+                if (shouldInclude && category != null && !category.isEmpty() &&
+                        !category.equals(transaction.getCategory())) {
+                    shouldInclude = false;
+                }
+
+                // Apply amount filter
+                if (shouldInclude && (transaction.getAmount() < minAmount ||
+                        transaction.getAmount() > maxAmount)) {
+                    shouldInclude = false;
+                }
+
+                // Apply exclusion filter
+                if (shouldInclude && transaction.isExcludedFromTotal() && !showingExcluded) {
+                    shouldInclude = false;
+                }
+
+                // Apply search query
+                if (shouldInclude && !searchQuery.isEmpty()) {
+                    boolean matchesSearch = false;
+                    String lowerQuery = searchQuery.toLowerCase();
+
+                    // Check description
+                    if (transaction.getDescription() != null &&
+                            transaction.getDescription().toLowerCase().contains(lowerQuery)) {
+                        matchesSearch = true;
+                    }
+
+                    // Check bank
+                    if (!matchesSearch && transaction.getBank() != null &&
+                            transaction.getBank().toLowerCase().contains(lowerQuery)) {
+                        matchesSearch = true;
+                    }
+
+                    // Check category
+                    if (!matchesSearch && transaction.getCategory() != null &&
+                            transaction.getCategory().toLowerCase().contains(lowerQuery)) {
+                        matchesSearch = true;
+                    }
+
+                    // Check merchant name
+                    if (!matchesSearch && transaction.getMerchantName() != null &&
+                            transaction.getMerchantName().toLowerCase().contains(lowerQuery)) {
+                        matchesSearch = true;
+                    }
+
+                    // Check amount
+                    if (!matchesSearch && String.valueOf(transaction.getAmount()).contains(lowerQuery)) {
+                        matchesSearch = true;
+                    }
+
+                    shouldInclude = matchesSearch;
+                }
+
+                if (shouldInclude) {
+                    result.add(transaction);
+                }
+            }
+
+            // Apply current sort option
+            sortTransactions(result, sortOption);
+
+            return result;
         }
     }
 }
