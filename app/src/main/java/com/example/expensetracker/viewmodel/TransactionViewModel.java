@@ -216,4 +216,8 @@ public class TransactionViewModel extends AndroidViewModel {
     public List<Transaction> getTransactionsBetweenDatesPaginatedSync(long startDate, long endDate, int limit, int offset) {
         return repository.getTransactionsBetweenDatesPaginatedSync(startDate, endDate, limit, offset);
     }
+
+    public List<Transaction> getNonExcludedTransactionsBetweenDatesPaginatedSync(long startDate, long endDate, int limit, int offset) {
+        return repository.getNonExcludedTransactionsBetweenDatesPaginatedSync(startDate, endDate, limit, offset);
+    }
 }

@@ -291,18 +291,29 @@ public class MainActivity extends AppCompatActivity {
 
         executorService.execute(() -> {
             int offset = currentPage * PAGE_SIZE;
-            List<Transaction> nextPageTransactions = viewModel.getTransactionsBetweenDatesPaginatedSync(
-                    fromDate, toDate, PAGE_SIZE, offset);
+
+            List<Transaction> nextPageTransactions;
+
+            if (currentFilterState.showingExcluded) {
+                // Load all transactions if explicitly showing excluded ones
+                nextPageTransactions = viewModel.getTransactionsBetweenDatesPaginatedSync(
+                        fromDate, toDate, PAGE_SIZE, offset);
+            } else {
+                // Only load non-excluded transactions
+                nextPageTransactions = viewModel.getNonExcludedTransactionsBetweenDatesPaginatedSync(
+                        fromDate, toDate, PAGE_SIZE, offset);
+            }
 
             // If we got less items than PAGE_SIZE, we've reached the end
             hasMoreData = nextPageTransactions != null && nextPageTransactions.size() == PAGE_SIZE;
 
+            List<Transaction> finalNextPageTransactions = nextPageTransactions;
             runOnUiThread(() -> {
                 if (loadingIndicator != null) {
                     loadingIndicator.setVisibility(View.GONE);
                 }
 
-                if (nextPageTransactions != null && !nextPageTransactions.isEmpty()) {
+                if (finalNextPageTransactions != null && !finalNextPageTransactions.isEmpty()) {
                     // Add new items to adapter
                     adapter.addTransactions(nextPageTransactions);
 
@@ -992,7 +1003,14 @@ public class MainActivity extends AppCompatActivity {
         RangeSlider amountRangeSlider = dialogView.findViewById(R.id.amountRangeSlider);
         TextView amountRangeText = dialogView.findViewById(R.id.amountRangeText);
 
-        // Setup filter dropdowns
+        // Get the exclude switch
+        androidx.appcompat.widget.SwitchCompat excludeSwitch = dialogView.findViewById(R.id.excludeSwitch);
+        if (excludeSwitch != null) {
+            // Set initial state based on current filter
+            excludeSwitch.setChecked(currentFilterState.showingExcluded);
+        }
+
+        // Setup filter dropdowns (unchanged)
         ArrayAdapter<String> bankAdapter = new ArrayAdapter<>(
                 this,
                 android.R.layout.simple_dropdown_item_1line,
@@ -1058,14 +1076,20 @@ public class MainActivity extends AppCompatActivity {
                 maxAmount = values.get(1);
             }
 
-            // Apply filters
-            applyAdvancedFilters(bank, type, category, minAmount, maxAmount);
+            // Get excluded switch state
+            boolean showExcluded = excludeSwitch != null && excludeSwitch.isChecked();
+
+            // Apply filters with excluded state
+            applyAdvancedFilters(bank, type, category, minAmount, maxAmount, showExcluded);
             dialog.dismiss();
         });
 
         resetButton.setOnClickListener(v -> {
             // Reset all filters
-            updateTransactionsList();
+            currentFilterState = new FilterState(); // Reset to default state (with showingExcluded = false)
+
+            // Reset and reload transactions
+            resetPagination();
 
             // Hide filter indicators
             if (filterIndicatorContainer != null) {
@@ -1079,20 +1103,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Fix for applyAdvancedFilters method
-    private void applyAdvancedFilters(String bank, String type, String category, double minAmount, double maxAmount) {
+    private void applyAdvancedFilters(String bank, String type, String category,
+                                      double minAmount, double maxAmount, boolean showExcluded) {
+        // Check if excluded state is changing
+        boolean excludedStateChanged = currentFilterState.showingExcluded != showExcluded;
+
         // Update filter state
         currentFilterState.bank = bank;
         currentFilterState.type = type;
         currentFilterState.category = category;
         currentFilterState.minAmount = minAmount;
         currentFilterState.maxAmount = maxAmount;
+        currentFilterState.showingExcluded = showExcluded;
 
-        // Apply filters to allTransactions
-        List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
-
-        // Update UI
-        adapter.setTransactions(filteredTransactions);
-        updateSummary(filteredTransactions);
+        // If excluded state changed, we need to reload data from database
+        if (excludedStateChanged) {
+            // Reset pagination and reload
+            resetPagination();
+        } else {
+            // Just apply filters to existing data
+            List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
+            adapter.setTransactions(filteredTransactions);
+            updateSummary(filteredTransactions);
+        }
 
         // Show filter indicator
         if (filterIndicatorContainer != null) {
@@ -1123,6 +1156,12 @@ public class MainActivity extends AppCompatActivity {
                 if (minAmount > 0 || maxAmount < 100000) {
                     if (hasFilter) filterDesc.append(", ");
                     filterDesc.append("Amount ₹").append((int)minAmount).append("-₹").append((int)maxAmount);
+                    hasFilter = true;
+                }
+
+                if (showExcluded) {
+                    if (hasFilter) filterDesc.append(", ");
+                    filterDesc.append("Including excluded");
                 }
 
                 filterIndicator.setText(filterDesc.toString());
@@ -1132,7 +1171,7 @@ public class MainActivity extends AppCompatActivity {
 
             if (resultCount != null) {
                 resultCount.setText(String.format(Locale.getDefault(),
-                        "%d transaction(s) found", filteredTransactions.size()));
+                        "%d transaction(s) found", adapter.getItemCount()));
             }
         }
     }
@@ -1499,8 +1538,20 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
-        // Refresh data when coming back to this activity
-        updateTransactionsList();
+        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
+        bottomNav.setSelectedItemId(R.id.nav_home);
+
+        // If filter state includes showing excluded transactions, just refresh the current view
+        // Otherwise, reset to show only non-excluded transactions
+        if (currentFilterState.showingExcluded) {
+            // Just refresh current view with current filters
+            List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
+            adapter.setTransactions(filteredTransactions);
+            updateSummary(filteredTransactions);
+        } else {
+            // Reset pagination and reload non-excluded transactions
+            resetPagination();
+        }
     }
 
     @Override

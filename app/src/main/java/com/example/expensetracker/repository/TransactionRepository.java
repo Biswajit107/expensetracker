@@ -180,4 +180,8 @@ public class TransactionRepository {
                 .getTransactionsBetweenDatesPaginatedSync(startDate, endDate, limit, offset);
     }
 
+    public List<Transaction> getNonExcludedTransactionsBetweenDatesPaginatedSync(long startDate, long endDate, int limit, int offset) {
+        return transactionDao.getNonExcludedTransactionsBetweenDatesPaginatedSync(startDate, endDate, limit, offset);
+    }
+
 }
