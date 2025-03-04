@@ -15,34 +15,27 @@ import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.database.Cursor;
 import android.graphics.Color;
-import android.net.Uri;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.provider.Telephony;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ImageButton;
-import android.widget.Spinner;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.example.expensetracker.adapters.TransactionAdapter;
 import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.database.TransactionDatabase;
-import com.example.expensetracker.dialogs.AutoExcludedTransactionsDialog;
 import com.example.expensetracker.dialogs.TransactionEditDialog;
 import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.receivers.EnhancedSMSReceiver;
-import com.example.expensetracker.receivers.SMSReceiver;
 import com.example.expensetracker.repository.TransactionRepository;
-import com.example.expensetracker.utils.TransactionSearchSortUtil;
 import com.example.expensetracker.viewmodel.TransactionViewModel;
 import com.example.expensetracker.utils.PreferencesManager;
 import com.github.mikephil.charting.charts.LineChart;
@@ -59,6 +52,7 @@ import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
+import com.google.android.material.slider.RangeSlider;
 import com.google.android.material.textfield.TextInputEditText;
 
 import java.text.SimpleDateFormat;
@@ -72,22 +66,20 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import android.widget.AutoCompleteTextView;
-import android.widget.ArrayAdapter;
 
 public class MainActivity extends AppCompatActivity {
     private static final int SMS_PERMISSION_REQUEST_CODE = 123;
+    private static final String TAG = "MainActivity";
 
     private TransactionViewModel viewModel;
     private TransactionAdapter adapter;
-    private AutoCompleteTextView bankSpinner;
-    private AutoCompleteTextView typeSpinner;
-    private EditText budgetInput;
     private TextView totalDebitsText;
     private TextView totalCreditsText;
     private TextView balanceText;
     private MaterialCardView alertCard;
     private TextView alertText;
+    private ProgressBar loadingIndicator;
+    private TextView emptyStateText;
 
     private View filterIndicatorContainer;
     private TextView filterIndicator;
@@ -101,6 +93,7 @@ public class MainActivity extends AppCompatActivity {
 
     private EditText searchInput;
     private Button sortButton;
+    private Button filterButton;
     private List<Transaction> allTransactions = new ArrayList<>();
 
     private static final int PAGE_SIZE = 25;
@@ -116,66 +109,139 @@ public class MainActivity extends AppCompatActivity {
         // Initialize ExecutorService
         executorService = Executors.newSingleThreadExecutor();
 
+        // Initialize basic views and setup
+        preferencesManager = new PreferencesManager(this);
         initializeViews();
+        setupRecyclerView();
+        setupViewModel();
+        setupDateRangeUI();
+        setupDefaultDates();
+
         // Set up new components
         setupPagination();
         setupSpendingChart();
         setupDateRangeChips();
         setupCategoryFilter();
         setupBudgetFab();
-
-//        setupSpinners();
-        setupRecyclerView();
-        setupViewModel();
-
-        preferencesManager = new PreferencesManager(this);
-        setupDateRangeUI();
-        setupDefaultDates();
-        checkAndRequestSMSPermissions();
-        setupBottomNavigation();
-
-        //checkAutoExcludedTransactions();
-
-        // Initialize search and sort components
-        searchInput = findViewById(R.id.searchInput);
-        sortButton = findViewById(R.id.sortButton);
-
-        // Set up search functionality
         setupSearch();
-
-        // Set up sort functionality
         setupSort();
 
-        // Your existing ViewModel observer
-//        viewModel.getTransactionsBetweenDates(fromDate,toDate).observe(this, transactions -> {
-//            allTransactions = new ArrayList<>(transactions); // Save a copy of all transactions
-//            adapter.setTransactions(transactions);
-//        });
+        // Check permissions and setup navigation
+        checkAndRequestSMSPermissions();
+        setupBottomNavigation();
     }
 
-    private void setupSearch() {
-        searchInput.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+    private void initializeViews() {
+        // Find the views
+        totalDebitsText = findViewById(R.id.totalDebitsText);
+        totalCreditsText = findViewById(R.id.totalCreditsText);
+        balanceText = findViewById(R.id.balanceText);
+        alertCard = findViewById(R.id.alertCard);
+        alertText = findViewById(R.id.alertText);
+        loadingIndicator = findViewById(R.id.loadingIndicator);
+        emptyStateText = findViewById(R.id.emptyStateText);
 
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+        // Find input and action elements
+        searchInput = findViewById(R.id.searchInput);
+        sortButton = findViewById(R.id.sortButton);
+        filterButton = findViewById(R.id.filterButton);
 
-            @Override
-            public void afterTextChanged(Editable s) {
-                filterTransactions(s.toString());
+        // Find filter indicator elements
+        filterIndicatorContainer = findViewById(R.id.filterIndicatorContainer);
+        filterIndicator = findViewById(R.id.filterIndicator);
+        clearFilterButton = findViewById(R.id.clearFilterButton);
+        resultCount = findViewById(R.id.resultCount);
+
+        // Set up filter button click listener
+        if (filterButton != null) {
+            filterButton.setOnClickListener(v -> showAdvancedFilterDialog());
+        }
+
+        // Set default filter indicator visibility
+        if (filterIndicatorContainer != null) {
+            filterIndicatorContainer.setVisibility(View.GONE);
+        }
+
+        // Setup clear filter button
+        if (clearFilterButton != null) {
+            clearFilterButton.setOnClickListener(v -> {
+                // Reset and show all transactions
+                updateTransactionsList();
+
+                // Hide filter UI
+                filterIndicatorContainer.setVisibility(View.GONE);
+            });
+        }
+    }
+
+    private void setupRecyclerView() {
+        RecyclerView recyclerView = findViewById(R.id.recyclerView);
+        if (recyclerView == null) {
+            Log.e(TAG, "RecyclerView not found in layout!");
+            return;
+        }
+
+        adapter = new TransactionAdapter();
+        recyclerView.setAdapter(adapter);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+
+        // Set click listener for transactions
+        adapter.setOnTransactionClickListener(transaction -> {
+            showEditTransactionDialog(transaction);
+        });
+    }
+
+    private void setupViewModel() {
+        viewModel = new ViewModelProvider(this).get(TransactionViewModel.class);
+
+        // Set up initial transaction loading
+        resetPagination();
+
+        // Observe budget changes
+        viewModel.getBudget().observe(this, budget -> {
+            if (budget > 0) {
+                viewModel.getTransactionsBetweenDates(fromDate, toDate, transactions -> {
+                    if (transactions != null) {
+                        updateSummaryWithBudget(transactions, budget);
+                    } else {
+                        resetBudgetUI(budget);
+                    }
+                });
+            } else {
+                resetBudgetUI(0);
             }
         });
     }
 
+    private void showEditTransactionDialog(Transaction transaction) {
+        // Create the dialog with the transaction
+        TransactionEditDialog dialog = new TransactionEditDialog(transaction);
+
+        // Set the listener for when the transaction is edited
+        dialog.setOnTransactionEditListener(editedTransaction -> {
+            // Update the transaction in the database
+            viewModel.updateTransaction(editedTransaction);
+
+            // Refresh the transactions list
+            updateTransactionsList();
+        });
+
+        // Show the dialog
+        dialog.show(getSupportFragmentManager(), "edit_transaction");
+    }
+
     private void setupPagination() {
         RecyclerView recyclerView = findViewById(R.id.recyclerView);
+        if (recyclerView == null) return;
+
         recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
                 super.onScrolled(recyclerView, dx, dy);
 
                 LinearLayoutManager layoutManager = (LinearLayoutManager) recyclerView.getLayoutManager();
+                if (layoutManager == null) return;
+
                 int visibleItemCount = layoutManager.getChildCount();
                 int totalItemCount = layoutManager.getItemCount();
                 int firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition();
@@ -195,8 +261,9 @@ public class MainActivity extends AppCompatActivity {
     private void loadMoreTransactions() {
         isLoading = true;
 
-        // Show loading indicator (add a ProgressBar at the bottom of RecyclerView)
-        // adapter.showLoadingIndicator();
+        if (loadingIndicator != null) {
+            loadingIndicator.setVisibility(View.VISIBLE);
+        }
 
         executorService.execute(() -> {
             int offset = currentPage * PAGE_SIZE;
@@ -204,23 +271,177 @@ public class MainActivity extends AppCompatActivity {
                     fromDate, toDate, PAGE_SIZE, offset);
 
             // If we got less items than PAGE_SIZE, we've reached the end
-            hasMoreData = nextPageTransactions.size() == PAGE_SIZE;
+            hasMoreData = nextPageTransactions != null && nextPageTransactions.size() == PAGE_SIZE;
 
             runOnUiThread(() -> {
-                // Hide loading indicator
-                // adapter.hideLoadingIndicator();
+                if (loadingIndicator != null) {
+                    loadingIndicator.setVisibility(View.GONE);
+                }
 
-                // Add new items to adapter
-                adapter.addTransactions(nextPageTransactions);
+                if (nextPageTransactions != null && !nextPageTransactions.isEmpty()) {
+                    // Add new items to adapter
+                    adapter.addTransactions(nextPageTransactions);
+
+                    // Add to all transactions list for filtering
+                    allTransactions.addAll(nextPageTransactions);
+
+                    // Update empty state view
+                    if (emptyStateText != null) {
+                        emptyStateText.setVisibility(View.GONE);
+                    }
+                } else if (adapter.getItemCount() == 0 && emptyStateText != null) {
+                    // Show empty state if no transactions
+                    emptyStateText.setVisibility(View.VISIBLE);
+                }
+
                 currentPage++;
                 isLoading = false;
             });
         });
     }
 
-    // Add this method to MainActivity.java
+    private void resetPagination() {
+        currentPage = 0;
+        hasMoreData = true;
+        allTransactions.clear();
+
+        if (adapter != null) {
+            adapter.clearTransactions();
+        }
+
+        loadMoreTransactions();
+    }
+
+    private void setupSearch() {
+        if (searchInput == null) return;
+
+        searchInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                filterTransactions(s.toString());
+            }
+        });
+    }
+
+    private void filterTransactions(String query) {
+        if (query.isEmpty()) {
+            // If search is empty, show all transactions
+            adapter.setTransactions(allTransactions);
+        } else {
+            // Filter transactions based on query
+            List<Transaction> filteredList = new ArrayList<>();
+            String lowerQuery = query.toLowerCase();
+
+            for (Transaction transaction : allTransactions) {
+                if ((transaction.getDescription() != null &&
+                        transaction.getDescription().toLowerCase().contains(lowerQuery)) ||
+                        (transaction.getBank() != null &&
+                                transaction.getBank().toLowerCase().contains(lowerQuery)) ||
+                        (transaction.getCategory() != null &&
+                                transaction.getCategory().toLowerCase().contains(lowerQuery)) ||
+                        (transaction.getMerchantName() != null &&
+                                transaction.getMerchantName().toLowerCase().contains(lowerQuery)) ||
+                        String.valueOf(transaction.getAmount()).contains(lowerQuery)) {
+
+                    filteredList.add(transaction);
+                }
+            }
+
+            adapter.setTransactions(filteredList);
+
+            // Update filter indicator
+            if (filterIndicatorContainer != null) {
+                filterIndicatorContainer.setVisibility(View.VISIBLE);
+                filterIndicator.setText("Search: " + query);
+
+                if (resultCount != null) {
+                    resultCount.setText(String.format(Locale.getDefault(),
+                            "%d transaction(s) found", filteredList.size()));
+                }
+            }
+        }
+    }
+
+    private void setupSort() {
+        if (sortButton == null) {
+            Log.d(TAG, "Sort button not found in layout");
+            return;
+        }
+
+        sortButton.setOnClickListener(v -> {
+            String[] sortOptions = {
+                    "Date (newest first)",
+                    "Date (oldest first)",
+                    "Amount (highest first)",
+                    "Amount (lowest first)",
+                    "Description (A-Z)",
+                    "Description (Z-A)"
+            };
+
+            new AlertDialog.Builder(this)
+                    .setTitle("Sort Transactions By")
+                    .setItems(sortOptions, (dialog, which) -> {
+                        // Apply the selected sort
+                        sortTransactions(which);
+                    })
+                    .show();
+        });
+    }
+
+    private void sortTransactions(int sortOption) {
+        // Get current list (might be filtered by search)
+        List<Transaction> currentList = new ArrayList<>(adapter.getTransactions());
+
+        switch (sortOption) {
+            case 0: // Date (newest first)
+                Collections.sort(currentList, (a, b) -> Long.compare(b.getDate(), a.getDate()));
+                break;
+
+            case 1: // Date (oldest first)
+                Collections.sort(currentList, (a, b) -> Long.compare(a.getDate(), b.getDate()));
+                break;
+
+            case 2: // Amount (highest first)
+                Collections.sort(currentList, (a, b) -> Double.compare(b.getAmount(), a.getAmount()));
+                break;
+
+            case 3: // Amount (lowest first)
+                Collections.sort(currentList, (a, b) -> Double.compare(a.getAmount(), b.getAmount()));
+                break;
+
+            case 4: // Description (A-Z)
+                Collections.sort(currentList, (a, b) -> {
+                    String descA = a.getDescription() != null ? a.getDescription() : "";
+                    String descB = b.getDescription() != null ? b.getDescription() : "";
+                    return descA.compareToIgnoreCase(descB);
+                });
+                break;
+
+            case 5: // Description (Z-A)
+                Collections.sort(currentList, (a, b) -> {
+                    String descA = a.getDescription() != null ? a.getDescription() : "";
+                    String descB = b.getDescription() != null ? b.getDescription() : "";
+                    return descB.compareToIgnoreCase(descA);
+                });
+                break;
+        }
+
+        // Update adapter with sorted list
+        adapter.setTransactions(currentList);
+    }
+
     private void setupCategoryFilter() {
         ChipGroup categoryFilterChipGroup = findViewById(R.id.categoryFilterChipGroup);
+        if (categoryFilterChipGroup == null) {
+            Log.d(TAG, "Category filter chip group not found in layout");
+            return;
+        }
 
         // Clear any existing chips
         categoryFilterChipGroup.removeAllViews();
@@ -281,41 +502,29 @@ public class MainActivity extends AppCompatActivity {
             updateTransactionsList();
         } else {
             // Show only transactions in the selected category
-            viewModel.getTransactionsBetweenDates(fromDate, toDate, allTransactions -> {
-                if (allTransactions == null) return;
+            List<Transaction> filteredTransactions = new ArrayList<>();
 
-                List<Transaction> filteredTransactions = new ArrayList<>();
-
-                // Apply bank and type filters if set
-                String selectedBank = bankSpinner.getText().toString();
-                String selectedType = typeSpinner.getText().toString();
-
-                for (Transaction transaction : allTransactions) {
-                    // Check if transaction matches category
-                    if (category.equals(transaction.getCategory())) {
-                        // Apply other filters
-                        boolean bankMatch = selectedBank.equals("All Banks") ||
-                                selectedBank.equals(transaction.getBank());
-                        boolean typeMatch = selectedType.equals("All Types") ||
-                                selectedType.equals(transaction.getType());
-
-                        if (bankMatch && typeMatch) {
-                            filteredTransactions.add(transaction);
-                        }
-                    }
+            for (Transaction transaction : allTransactions) {
+                // Check if transaction matches category
+                if (category.equals(transaction.getCategory())) {
+                    filteredTransactions.add(transaction);
                 }
+            }
 
-                // Update adapter and UI
-                adapter.setTransactions(filteredTransactions);
-                updateSummary(filteredTransactions);
+            // Update adapter and UI
+            adapter.setTransactions(filteredTransactions);
+            updateSummary(filteredTransactions);
 
-                // Show filter indicator
+            // Show filter indicator
+            if (filterIndicatorContainer != null) {
                 filterIndicatorContainer.setVisibility(View.VISIBLE);
                 filterIndicator.setText("Filtered by category: " + category);
-                resultCount.setText(String.format(Locale.getDefault(),
-                        "%d transaction(s) found",
-                        filteredTransactions.size()));
-            });
+
+                if (resultCount != null) {
+                    resultCount.setText(String.format(Locale.getDefault(),
+                            "%d transaction(s) found", filteredTransactions.size()));
+                }
+            }
         }
     }
 
@@ -355,53 +564,64 @@ public class MainActivity extends AppCompatActivity {
         return luminance > 0.5 ? Color.BLACK : Color.WHITE;
     }
 
-    private void resetPagination() {
-        currentPage = 0;
-        hasMoreData = true;
-        adapter.clearTransactions();
-        loadMoreTransactions();
-    }
-
-    // Add this method to MainActivity.java
     private void setupDateRangeChips() {
         ChipGroup dateRangeChipGroup = findViewById(R.id.dateRangeChipGroup);
+        if (dateRangeChipGroup == null) {
+            Log.d(TAG, "Date range chip group not found in layout");
+            return;
+        }
 
         // Setup click listeners for each chip
-        findViewById(R.id.chipToday).setOnClickListener(v -> {
-            setDateRangeToday();
-            // Clear any previous chip selections if this was unselected
-            if (!((Chip)v).isChecked()) {
-                dateRangeChipGroup.clearCheck();
-            }
-        });
+        View chipToday = findViewById(R.id.chipToday);
+        if (chipToday != null) {
+            chipToday.setOnClickListener(v -> {
+                setDateRangeToday();
+                // Clear any previous chip selections if this was unselected
+                if (!((Chip)v).isChecked()) {
+                    dateRangeChipGroup.clearCheck();
+                }
+            });
+        }
 
-        findViewById(R.id.chipYesterday).setOnClickListener(v -> {
-            setDateRangeYesterday();
-            if (!((Chip)v).isChecked()) {
-                dateRangeChipGroup.clearCheck();
-            }
-        });
+        View chipYesterday = findViewById(R.id.chipYesterday);
+        if (chipYesterday != null) {
+            chipYesterday.setOnClickListener(v -> {
+                setDateRangeYesterday();
+                if (!((Chip)v).isChecked()) {
+                    dateRangeChipGroup.clearCheck();
+                }
+            });
+        }
 
-        findViewById(R.id.chipThisWeek).setOnClickListener(v -> {
-            setDateRangeThisWeek();
-            if (!((Chip)v).isChecked()) {
-                dateRangeChipGroup.clearCheck();
-            }
-        });
+        View chipThisWeek = findViewById(R.id.chipThisWeek);
+        if (chipThisWeek != null) {
+            chipThisWeek.setOnClickListener(v -> {
+                setDateRangeThisWeek();
+                if (!((Chip)v).isChecked()) {
+                    dateRangeChipGroup.clearCheck();
+                }
+            });
+        }
 
-        findViewById(R.id.chipThisMonth).setOnClickListener(v -> {
-            setDateRangeThisMonth();
-            if (!((Chip)v).isChecked()) {
-                dateRangeChipGroup.clearCheck();
-            }
-        });
+        View chipThisMonth = findViewById(R.id.chipThisMonth);
+        if (chipThisMonth != null) {
+            chipThisMonth.setOnClickListener(v -> {
+                setDateRangeThisMonth();
+                if (!((Chip)v).isChecked()) {
+                    dateRangeChipGroup.clearCheck();
+                }
+            });
+        }
 
-        findViewById(R.id.chipLast3Months).setOnClickListener(v -> {
-            setDateRangeLast3Months();
-            if (!((Chip)v).isChecked()) {
-                dateRangeChipGroup.clearCheck();
-            }
-        });
+        View chipLast3Months = findViewById(R.id.chipLast3Months);
+        if (chipLast3Months != null) {
+            chipLast3Months.setOnClickListener(v -> {
+                setDateRangeLast3Months();
+                if (!((Chip)v).isChecked()) {
+                    dateRangeChipGroup.clearCheck();
+                }
+            });
+        }
     }
 
     private void setDateRangeToday() {
@@ -521,9 +741,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupBudgetFab() {
         FloatingActionButton setBudgetFab = findViewById(R.id.setBudgetFab);
-        setBudgetFab.setOnClickListener(v -> {
-            showBudgetDialog();
-        });
+        if (setBudgetFab != null) {
+            setBudgetFab.setOnClickListener(v -> {
+                showBudgetDialog();
+            });
+        }
     }
 
     private void showBudgetDialog() {
@@ -543,9 +765,15 @@ public class MainActivity extends AppCompatActivity {
         // Get current budget and expenses
         double currentBudget = 0;
         try {
-            currentBudget = viewModel.getBudget().getValue();
-            budgetInput.setText(String.valueOf(currentBudget));
+            Double budgetValue = viewModel.getBudget().getValue();
+            if (budgetValue != null) {
+                currentBudget = budgetValue;
+                budgetInput.setText(String.valueOf(currentBudget));
+            } else {
+                budgetInput.setText("");
+            }
         } catch (Exception e) {
+            Log.e(TAG, "Error getting budget value", e);
             budgetInput.setText("");
         }
 
@@ -621,37 +849,12 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
-    private void filterTransactions(String query) {
-        if (query.isEmpty()) {
-            // If search is empty, show all transactions
-            adapter.setTransactions(allTransactions);
-        } else {
-            // Filter transactions based on query
-            List<Transaction> filteredList = new ArrayList<>();
-            String lowerQuery = query.toLowerCase();
-
-            for (Transaction transaction : allTransactions) {
-                if ((transaction.getDescription() != null &&
-                        transaction.getDescription().toLowerCase().contains(lowerQuery)) ||
-                        (transaction.getBank() != null &&
-                                transaction.getBank().toLowerCase().contains(lowerQuery)) ||
-                        (transaction.getCategory() != null &&
-                                transaction.getCategory().toLowerCase().contains(lowerQuery)) ||
-                        (transaction.getMerchantName() != null &&
-                                transaction.getMerchantName().toLowerCase().contains(lowerQuery)) ||
-                        String.valueOf(transaction.getAmount()).contains(lowerQuery)) {
-
-                    filteredList.add(transaction);
-                }
-            }
-
-            adapter.setTransactions(filteredList);
-        }
-    }
-
-    // Add this method to MainActivity.java
     private void setupSpendingChart() {
         LineChart spendingLineChart = findViewById(R.id.spendingLineChart);
+        if (spendingLineChart == null) {
+            Log.d(TAG, "Spending line chart not found in layout");
+            return;
+        }
 
         // Configure chart appearance
         spendingLineChart.getDescription().setEnabled(false);
@@ -677,6 +880,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateSpendingChart() {
         LineChart spendingLineChart = findViewById(R.id.spendingLineChart);
+        if (spendingLineChart == null) return;
 
         // Start date is beginning of selected date range or 30 days ago if range is larger
         long chartEndDate = toDate;
@@ -688,7 +892,6 @@ public class MainActivity extends AppCompatActivity {
             chartStartDateInt = toDate - thirtyDaysInMillis;
         }
         long chartStartDate = chartStartDateInt;
-
 
         // Get transactions for chart date range
         executorService.execute(() -> {
@@ -771,363 +974,203 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void setupSort() {
-        sortButton.setOnClickListener(v -> {
-            String[] sortOptions = {
-                    "Date (newest first)",
-                    "Date (oldest first)",
-                    "Amount (highest first)",
-                    "Amount (lowest first)",
-                    "Description (A-Z)",
-                    "Description (Z-A)"
-            };
+    private void showAdvancedFilterDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_advanced_filter, null);
+        builder.setView(dialogView);
 
-            new AlertDialog.Builder(this)
-                    .setTitle("Sort Transactions By")
-                    .setItems(sortOptions, (dialog, which) -> {
-                        // Apply the selected sort
-                        sortTransactions(which);
-                    })
-                    .show();
-        });
-    }
+        // Initialize dialog views
+        AutoCompleteTextView bankFilterDropdown = dialogView.findViewById(R.id.bankFilterDropdown);
+        AutoCompleteTextView typeFilterDropdown = dialogView.findViewById(R.id.typeFilterDropdown);
+        AutoCompleteTextView categoryFilterDropdown = dialogView.findViewById(R.id.categoryFilterDropdown);
+        RangeSlider amountRangeSlider = dialogView.findViewById(R.id.amountRangeSlider);
+        TextView amountRangeText = dialogView.findViewById(R.id.amountRangeText);
 
-    private void sortTransactions(int sortOption) {
-        // Get current list (might be filtered by search)
-        List<Transaction> currentList = new ArrayList<>(adapter.getTransactions());
-
-        switch (sortOption) {
-            case 0: // Date (newest first)
-                Collections.sort(currentList, (a, b) -> Long.compare(b.getDate(), a.getDate()));
-                break;
-
-            case 1: // Date (oldest first)
-                Collections.sort(currentList, (a, b) -> Long.compare(a.getDate(), b.getDate()));
-                break;
-
-            case 2: // Amount (highest first)
-                Collections.sort(currentList, (a, b) -> Double.compare(b.getAmount(), a.getAmount()));
-                break;
-
-            case 3: // Amount (lowest first)
-                Collections.sort(currentList, (a, b) -> Double.compare(a.getAmount(), b.getAmount()));
-                break;
-
-            case 4: // Description (A-Z)
-                Collections.sort(currentList, (a, b) -> {
-                    String descA = a.getDescription() != null ? a.getDescription() : "";
-                    String descB = b.getDescription() != null ? b.getDescription() : "";
-                    return descA.compareToIgnoreCase(descB);
-                });
-                break;
-
-            case 5: // Description (Z-A)
-                Collections.sort(currentList, (a, b) -> {
-                    String descA = a.getDescription() != null ? a.getDescription() : "";
-                    String descB = b.getDescription() != null ? b.getDescription() : "";
-                    return descB.compareToIgnoreCase(descA);
-                });
-                break;
-        }
-
-        // Update adapter with sorted list
-        adapter.setTransactions(currentList);
-    }
-
-    private void setupDefaultDates() {
-
-        fromDate = preferencesManager.getFromDate();
-        toDate = preferencesManager.getToDate();
-
-        Calendar calendar = Calendar.getInstance();
-
-        // Set To Date as current date
-        calendar.set(Calendar.HOUR_OF_DAY, 23);
-        calendar.set(Calendar.MINUTE, 59);
-        calendar.set(Calendar.SECOND, 59);
-        toDate = calendar.getTimeInMillis();
-
-        // Set From Date as 1st of current month
-        calendar.set(Calendar.DAY_OF_MONTH, 1);
-        calendar.set(Calendar.HOUR_OF_DAY, 0);
-        calendar.set(Calendar.MINUTE, 0);
-        calendar.set(Calendar.SECOND, 0);
-        fromDate = calendar.getTimeInMillis();
-
-        // Update button texts
-        SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
-        ((MaterialButton) findViewById(R.id.fromDateButton)).setText(dateFormat.format(new Date(fromDate)));
-        ((MaterialButton) findViewById(R.id.toDateButton)).setText(dateFormat.format(new Date(toDate)));
-
-        loadExistingSMS();
-
-    }
-
-
-    private void updateDateButtonTexts() {
-        SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
-        ((MaterialButton) findViewById(R.id.fromDateButton)).setText(dateFormat.format(new Date(fromDate)));
-        ((MaterialButton) findViewById(R.id.toDateButton)).setText(dateFormat.format(new Date(toDate)));
-    }
-
-    private void initializeViews() {
-        // Find AutoCompleteTextViews instead of Spinners
-        bankSpinner = findViewById(R.id.bankSpinner);
-        typeSpinner = findViewById(R.id.typeSpinner);
-//        budgetInput = findViewById(R.id.budgetInput);
-        totalDebitsText = findViewById(R.id.totalDebitsText);
-        totalCreditsText = findViewById(R.id.totalCreditsText);
-        balanceText = findViewById(R.id.balanceText);
-        alertCard = findViewById(R.id.alertCard);
-        alertText = findViewById(R.id.alertText);
-
-        filterIndicatorContainer = findViewById(R.id.filterIndicatorContainer);
-        filterIndicator = findViewById(R.id.filterIndicator);
-        clearFilterButton = findViewById(R.id.clearFilterButton);
-        resultCount = findViewById(R.id.resultCount);
-
-//        budgetInput = findViewById(R.id.budgetAmountInput);
-//
-//        // Rest of the method remains the same
-//        budgetInput.addTextChangedListener(new TextWatcher() {
-//            @Override
-//            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-//
-//            @Override
-//            public void onTextChanged(CharSequence s, int start, int before, int count) {}
-//
-//            @Override
-//            public void afterTextChanged(Editable s) {
-//                try {
-//                    // Parse the budget value
-//                    double budget = s.toString().isEmpty() ? 0 : Double.parseDouble(s.toString());
-//
-//                    // Directly set the budget in ViewModel
-//                    viewModel.setBudget(budget);
-//                } catch (NumberFormatException e) {
-//                    // Handle invalid input
-//                    viewModel.setBudget(0.0);
-//                }
-//            }
-//        });
-
-        // Set default filter indicator visibility
-        if (filterIndicatorContainer != null) {
-            filterIndicatorContainer.setVisibility(View.GONE);
-        }
-
-        // Setup clear filter button
-        if (clearFilterButton != null) {
-            clearFilterButton.setOnClickListener(v -> {
-                // Reset and show all transactions
-                updateTransactionsList();
-
-                // Hide filter UI
-                filterIndicatorContainer.setVisibility(View.GONE);
-            });
-        }
-
-    }
-
-    private void setupSpinners() {
-        // Setup Bank Spinner
+        // Setup filter dropdowns
         ArrayAdapter<String> bankAdapter = new ArrayAdapter<>(
                 this,
-                android.R.layout.simple_spinner_dropdown_item,
-                new String[]{"All Banks", "HDFC", "ICICI", "SBI"}
+                android.R.layout.simple_dropdown_item_1line,
+                viewModel.getAvailableBanks()
         );
-        bankSpinner.setAdapter(bankAdapter);
+        bankFilterDropdown.setAdapter(bankAdapter);
+        bankFilterDropdown.setText("All Banks", false);
 
-        // Setup Type Spinner
         ArrayAdapter<String> typeAdapter = new ArrayAdapter<>(
                 this,
-                android.R.layout.simple_spinner_dropdown_item,
+                android.R.layout.simple_dropdown_item_1line,
                 new String[]{"All Types", "DEBIT", "CREDIT"}
         );
-        typeSpinner.setAdapter(typeAdapter);
+        typeFilterDropdown.setAdapter(typeAdapter);
+        typeFilterDropdown.setText("All Types", false);
 
-        // Set default values
-        bankSpinner.setText("All Banks", false);
-        typeSpinner.setText("All Types", false);
+        ArrayAdapter<String> categoryAdapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_dropdown_item_1line,
+                Transaction.Categories.getAllCategories()
+        );
+        categoryFilterDropdown.setAdapter(categoryAdapter);
 
-        bankSpinner.setOnItemClickListener((parent, view, position, id) -> {
+        // Set initial values for the slider
+        amountRangeSlider.setValueFrom(0f);
+        amountRangeSlider.setValueTo(100000f);
+
+        // Create a list with initial values
+        List<Float> initialValues = new ArrayList<>();
+        initialValues.add(0f);
+        initialValues.add(100000f);
+        amountRangeSlider.setValues(initialValues);
+
+        // Update amount range text when slider changes
+        amountRangeSlider.addOnChangeListener((slider, value, fromUser) -> {
+            List<Float> values = slider.getValues();
+            if (values != null && values.size() >= 2) {
+                amountRangeText.setText(String.format(Locale.getDefault(),
+                        "₹%.0f - ₹%.0f", values.get(0), values.get(1)));
+            }
+        });
+
+        // Setup buttons
+        Button applyButton = dialogView.findViewById(R.id.applyFilterButton);
+        Button resetButton = dialogView.findViewById(R.id.resetFilterButton);
+
+        // Create dialog
+        AlertDialog dialog = builder.create();
+
+        // Set button click listeners
+        applyButton.setOnClickListener(v -> {
+            // Get selected values
+            String bank = bankFilterDropdown.getText().toString();
+            String type = typeFilterDropdown.getText().toString();
+            String category = categoryFilterDropdown.getText().toString();
+
+            // Get amount range with safety checks
+            double minAmount = 0;
+            double maxAmount = 100000;
+            List<Float> values = amountRangeSlider.getValues();
+            if (values != null && values.size() >= 2) {
+                minAmount = values.get(0);
+                maxAmount = values.get(1);
+            }
+
+            // Apply filters
+            applyAdvancedFilters(bank, type, category, minAmount, maxAmount);
+            dialog.dismiss();
+        });
+
+        resetButton.setOnClickListener(v -> {
+            // Reset all filters
             updateTransactionsList();
-        });
 
-        typeSpinner.setOnItemClickListener((parent, view, position, id) -> {
-            updateTransactionsList();
-        });
-    }
-
-    private void setupRecyclerView() {
-        RecyclerView recyclerView = findViewById(R.id.recyclerView);
-        adapter = new TransactionAdapter();
-        recyclerView.setAdapter(adapter);
-        recyclerView.setLayoutManager(new LinearLayoutManager(this));
-
-        // Set click listener for transactions
-        adapter.setOnTransactionClickListener(transaction -> {
-            showEditTransactionDialog(transaction);
-        });
-    }
-
-    private void showEditTransactionDialog(Transaction transaction) {
-        // Create the dialog with the transaction
-        TransactionEditDialog dialog = new TransactionEditDialog(transaction);
-
-        // Set the listener for when the transaction is edited
-        dialog.setOnTransactionEditListener(editedTransaction -> {
-            // Update the transaction in the database
-            viewModel.updateTransaction(editedTransaction);
-
-            // Refresh the transactions list
-            updateTransactionsList();
-        });
-
-        // Show the dialog
-        dialog.show(getSupportFragmentManager(), "edit_transaction");
-    }
-
-
-
-    private void setupViewModel() {
-        viewModel = new ViewModelProvider(this).get(TransactionViewModel.class);
-
-        // Observe transactions between dates
-        executorService.execute(() -> {
-            // Retrieve transactions for the current date range
-            List<Transaction> transactions = TransactionDatabase.getInstance(this)
-                    .transactionDao()
-                    .getTransactionsBetweenDatesSync(fromDate, toDate);
-
-            runOnUiThread(() -> {
-                if (transactions != null && !transactions.isEmpty()) {
-                    updateTransactionsList(transactions);
-                } else {
-                    adapter.setTransactions(new ArrayList<>());
-                    updateSummary(new ArrayList<>());
-                }
-            });
-        });
-
-        viewModel.getBudget().observe(this, budget -> {
-//            if (budget > 0) {
-//                viewModel.getTransactionsBetweenDates(fromDate, toDate, transactions -> {
-//                    double totalDebits = viewModel.calculateTotalDebits(transactions);
-//                    double spendingPercentage = (totalDebits / budget) * 100;
-//
-//                    if (spendingPercentage > 70) {
-//                        alertCard.setVisibility(View.VISIBLE);
-//                        alertText.setText(String.format(Locale.getDefault(),
-//                                "Warning: You have spent %.1f%% of your monthly budget!",
-//                                spendingPercentage));
-//                    } else {
-//                        alertCard.setVisibility(View.GONE);
-//                    }
-
-//                });
-//            }
-            if (budget > 0) {
-                viewModel.getTransactionsBetweenDates(fromDate, toDate, transactions -> {
-                    if (transactions != null) {
-                        updateSummaryWithBudget(transactions, budget);
-                    } else {
-                        resetBudgetUI(budget);
-                    }
-                });
-            } else {
-                resetBudgetUI(0);
+            // Hide filter indicators
+            if (filterIndicatorContainer != null) {
+                filterIndicatorContainer.setVisibility(View.GONE);
             }
 
+            dialog.dismiss();
         });
+
+        dialog.show();
     }
 
-    private void updateSummaryWithBudget(List<Transaction> transactions, double budget) {
-        // Calculate total debits
-        double totalDebits = 0;
-        for (Transaction transaction : transactions) {
-            if ("DEBIT".equals(transaction.getType())) {
-                totalDebits += transaction.getAmount();
-            }
-        }
-
-        // Calculate remaining balance
-        double remainingBalance = budget - totalDebits;
-        double spendingPercentage = (totalDebits / budget) * 100;
-
-        // Update UI elements
-        totalDebitsText.setText(String.format(Locale.getDefault(), "₹%.2f", totalDebits));
-        balanceText.setText(String.format(Locale.getDefault(), "₹%.2f", remainingBalance));
-
-        // Budget alert logic
-        if (budget > 0) {
-            if (spendingPercentage > 70) {
-                alertCard.setVisibility(View.VISIBLE);
-                alertText.setText(String.format(Locale.getDefault(),
-                        "Warning: You have spent %.1f%% of your monthly budget of ₹%.2f!",
-                        spendingPercentage, budget));
-            } else {
-                alertCard.setVisibility(View.GONE);
-            }
-        }
-    }
-
-    private void resetBudgetUI(double budget) {
-        // Reset UI when no budget is set or transactions are empty
-//        totalDebitsText.setText("₹0.00");
-        balanceText.setText(budget > 0 ?
-                String.format(Locale.getDefault(), "₹%.2f", budget) :
-                "₹0.00");
-        alertCard.setVisibility(View.GONE);
-    }
-
-    private void updateTransactionsList(List<Transaction> allTransactions) {
-        String selectedBank = bankSpinner.getText().toString();
-        String selectedType = typeSpinner.getText().toString();
-
-        List<Transaction> filteredTransactions = new ArrayList<>();
-        for (Transaction transaction : allTransactions) {
-            boolean bankMatch = selectedBank.equals("All Banks") || selectedBank.equals(transaction.getBank());
-            boolean typeMatch = selectedType.equals("All Types") || selectedType.equals(transaction.getType());
-
-            if (bankMatch && typeMatch) {
-                filteredTransactions.add(transaction);
-            }
-        }
-
-        adapter.setTransactions(filteredTransactions);
-
-        // Get budget from input
-        double budget = 0;
-        try {
-            budget = budgetInput.getText().toString().isEmpty() ? 0 :
-                    Double.parseDouble(budgetInput.getText().toString());
-        } catch (NumberFormatException e) {
-            // Handle parsing error
-        }
-
-        updateSummaryWithBudget(filteredTransactions, budget);
-    }
-
-    private void updateTransactionsList() {
-        String selectedBank = bankSpinner.getText().toString();
-        String selectedType = typeSpinner.getText().toString();
-
+    // Fix for applyAdvancedFilters method
+    private void applyAdvancedFilters(String bank, String type, String category, double minAmount, double maxAmount) {
         viewModel.getTransactionsBetweenDates(fromDate, toDate, transactions -> {
             if (transactions == null) return;
 
             List<Transaction> filteredTransactions = new ArrayList<>();
-            for (Transaction transaction : transactions) {
-                boolean bankMatch = selectedBank.equals("All Banks") || selectedBank.equals(transaction.getBank());
-                boolean typeMatch = selectedType.equals("All Types") || selectedType.equals(transaction.getType());
 
-                if (bankMatch && typeMatch) {
+            for (Transaction transaction : transactions) {
+                boolean bankMatch = "All Banks".equals(bank) || bank.equals(transaction.getBank());
+                boolean typeMatch = "All Types".equals(type) || type.equals(transaction.getType());
+                boolean categoryMatch = category == null || category.isEmpty() || category.equals(transaction.getCategory());
+                boolean amountMatch = transaction.getAmount() >= minAmount && transaction.getAmount() <= maxAmount;
+
+                if (bankMatch && typeMatch && categoryMatch && amountMatch) {
                     filteredTransactions.add(transaction);
                 }
             }
 
+            // Update UI
             adapter.setTransactions(filteredTransactions);
             updateSummary(filteredTransactions);
+
+            // Show filter indicator
+            if (filterIndicatorContainer != null) {
+                filterIndicatorContainer.setVisibility(View.VISIBLE);
+
+                // Prepare filter description
+                StringBuilder filterDesc = new StringBuilder("Filtered by: ");
+                boolean hasFilter = false;
+
+                if (!"All Banks".equals(bank)) {
+                    filterDesc.append(bank);
+                    hasFilter = true;
+                }
+
+                if (!"All Types".equals(type)) {
+                    if (hasFilter) filterDesc.append(", ");
+                    filterDesc.append(type);
+                    hasFilter = true;
+                }
+
+                if (category != null && !category.isEmpty()) {
+                    if (hasFilter) filterDesc.append(", ");
+                    filterDesc.append(category);
+                    hasFilter = true;
+                }
+
+                if (minAmount > 0 || maxAmount < 100000) {
+                    if (hasFilter) filterDesc.append(", ");
+                    filterDesc.append("Amount ₹").append((int)minAmount).append("-₹").append((int)maxAmount);
+                    hasFilter = true;
+                }
+
+                if (!hasFilter) {
+                    filterDesc = new StringBuilder("No filters applied");
+                }
+
+                filterIndicator.setText(filterDesc.toString());
+                resultCount.setText(String.format(Locale.getDefault(),
+                        "%d transaction(s) found", filteredTransactions.size()));
+            }
+        });
+    }
+
+    private void updateTransactionsList() {
+        if (loadingIndicator != null) {
+            loadingIndicator.setVisibility(View.VISIBLE);
+        }
+
+        viewModel.getTransactionsBetweenDates(fromDate, toDate, transactions -> {
+            if (loadingIndicator != null) {
+                loadingIndicator.setVisibility(View.GONE);
+            }
+
+            if (transactions == null || transactions.isEmpty()) {
+                if (adapter != null) {
+                    adapter.setTransactions(new ArrayList<>());
+                }
+
+                updateSummary(new ArrayList<>());
+
+                // Show empty state
+                if (emptyStateText != null) {
+                    emptyStateText.setVisibility(View.VISIBLE);
+                }
+
+                return;
+            }
+
+            // Hide empty state
+            if (emptyStateText != null) {
+                emptyStateText.setVisibility(View.GONE);
+            }
+
+            adapter.setTransactions(transactions);
+            updateSummary(transactions);
+
+            // Save all transactions for search filtering
+            allTransactions = new ArrayList<>(transactions);
         });
     }
 
@@ -1146,84 +1189,72 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        totalDebitsText.setText(String.format(Locale.getDefault(), "₹%.2f", totalDebits));
-        totalCreditsText.setText(String.format(Locale.getDefault(), "₹%.2f", totalCredits));
-//        balanceText.setText(String.format(Locale.getDefault(), "₹%.2f", totalCredits - totalDebits));
+        if (totalDebitsText != null) {
+            totalDebitsText.setText(String.format(Locale.getDefault(), "₹%.2f", totalDebits));
+        }
+
+        if (totalCreditsText != null) {
+            totalCreditsText.setText(String.format(Locale.getDefault(), "₹%.2f", totalCredits));
+        }
     }
 
-    private void debugTransactionRetrieval() {
-        executorService.execute(() -> {
-            // Synchronous retrieval for debugging
-            List<Transaction> transactions = TransactionDatabase.getInstance(this)
-                    .transactionDao()
-                    .getTransactionsBetweenDatesSync(fromDate, toDate);
-
-            Log.d("TransactionDebug", "Sync method - Total transactions: " + transactions.size());
-
-            for (Transaction transaction : transactions) {
-                Log.d("TransactionDebug", "Sync Transaction: " +
-                        "ID: " + transaction.getId() +
-                        ", Date: " + new Date(transaction.getDate()) +
-                        ", Amount: " + transaction.getAmount() +
-                        ", Bank: " + transaction.getBank());
-            }
-        });
-    }
-
-    private double calculateTotalDebits(List<Transaction> transactions) {
-        if (transactions == null) return 0;
-        double total = 0;
+    private void updateSummaryWithBudget(List<Transaction> transactions, double budget) {
+        // Calculate total debits
+        double totalDebits = 0;
+        double totalCredits = 0;
         for (Transaction transaction : transactions) {
-            if ("DEBIT".equals(transaction.getType())) {
-                total += transaction.getAmount();
+            if (!transaction.isExcludedFromTotal()) {
+                if ("DEBIT".equals(transaction.getType())) {
+                    totalDebits += transaction.getAmount();
+                } else if ("CREDIT".equals(transaction.getType())) {
+                    totalCredits += transaction.getAmount();
+                }
             }
         }
-        return total;
-    }
 
-    private void setupBottomNavigation() {
-        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
-        bottomNav.setSelectedItemId(R.id.nav_home);
-        bottomNav.setOnItemSelectedListener(item -> {
-            switch (item.getItemId()) {
-                case R.id.nav_home:
-                    return true;
-                case R.id.nav_analytics:
-                    startActivity(new Intent(this, AnalyticsActivity.class));
-                    return true;
-                case R.id.nav_predictions:
-                    startActivity(new Intent(this, PredictionActivity.class));
-                    return true;
-                case R.id.nav_groups:
-                    startActivity(new Intent(this, GroupedExpensesActivity.class));
-                    return true;
-                case R.id.nav_excluded:
-                    startActivity(new Intent(this, ExcludedTransactionsActivity.class));
-                    return true;
-            }
-            return false;
-        });
+        // Update basic summary
+        if (totalDebitsText != null) {
+            totalDebitsText.setText(String.format(Locale.getDefault(), "₹%.2f", totalDebits));
+        }
 
-        // Check if there are excluded transactions and add a badge if there are
-        checkForExcludedTransactions(bottomNav);
-    }
+        if (totalCreditsText != null) {
+            totalCreditsText.setText(String.format(Locale.getDefault(), "₹%.2f", totalCredits));
+        }
 
-    private void checkForExcludedTransactions(BottomNavigationView bottomNav) {
-        executorService.execute(() -> {
-            TransactionDao dao = TransactionDatabase.getInstance(this).transactionDao();
-            int count = dao.getAutomaticallyExcludedTransactionCount();
+        // Calculate remaining balance
+        double remainingBalance = budget - totalDebits;
+        if (balanceText != null) {
+            balanceText.setText(String.format(Locale.getDefault(), "₹%.2f", remainingBalance));
+        }
 
-            runOnUiThread(() -> {
-                if (count > 0) {
-                    // Set badge with count on the excluded tab
-                    bottomNav.getOrCreateBadge(R.id.nav_excluded).setNumber(count);
-                    bottomNav.getOrCreateBadge(R.id.nav_excluded).setVisible(true);
+        // Budget alert logic
+        if (budget > 0) {
+            double spendingPercentage = (totalDebits / budget) * 100;
+
+            if (alertCard != null && alertText != null) {
+                if (spendingPercentage > 70) {
+                    alertCard.setVisibility(View.VISIBLE);
+                    alertText.setText(String.format(Locale.getDefault(),
+                            "Warning: You have spent %.1f%% of your monthly budget of ₹%.2f!",
+                            spendingPercentage, budget));
                 } else {
-                    // Remove badge if no excluded transactions
-                    bottomNav.removeBadge(R.id.nav_excluded);
+                    alertCard.setVisibility(View.GONE);
                 }
-            });
-        });
+            }
+        }
+    }
+
+    private void resetBudgetUI(double budget) {
+        // Reset UI when no budget is set or transactions are empty
+        if (balanceText != null) {
+            balanceText.setText(budget > 0 ?
+                    String.format(Locale.getDefault(), "₹%.2f", budget) :
+                    "₹0.00");
+        }
+
+        if (alertCard != null) {
+            alertCard.setVisibility(View.GONE);
+        }
     }
 
     private void setupDateRangeUI() {
@@ -1231,91 +1262,124 @@ public class MainActivity extends AppCompatActivity {
         MaterialButton toDateButton = findViewById(R.id.toDateButton);
         MaterialButton loadMessagesButton = findViewById(R.id.loadMessagesButton);
 
-        fromDateButton.setOnClickListener(v -> showDatePicker(true));
-        toDateButton.setOnClickListener(v -> showDatePicker(false));
+        if (fromDateButton != null) {
+            fromDateButton.setOnClickListener(v -> showDatePicker(true));
+        }
 
+        if (toDateButton != null) {
+            toDateButton.setOnClickListener(v -> showDatePicker(false));
+        }
+
+        // Save date range
         preferencesManager.saveSelectedDateRange(fromDate, toDate);
-        loadMessagesButton.setOnClickListener(v -> {
-            if (fromDate == 0 || toDate == 0) {
-                Toast.makeText(this, "Please select both dates", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            loadExistingSMS();
-        });
+
+        if (loadMessagesButton != null) {
+            loadMessagesButton.setOnClickListener(v -> {
+                if (fromDate == 0 || toDate == 0) {
+                    Toast.makeText(this, "Please select both dates", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                loadExistingSMS();
+            });
+        }
     }
 
     private void showDatePicker(boolean isFromDate) {
         Calendar calendar = Calendar.getInstance();
         calendar.setTimeInMillis(isFromDate ? fromDate : toDate);
 
-        new DatePickerDialog(this, (view, year, month, day) -> {
+        DatePickerDialog datePickerDialog = new DatePickerDialog(this, (view, year, month, day) -> {
             Calendar selectedDate = Calendar.getInstance();
             selectedDate.set(year, month, day);
+
             if (isFromDate) {
                 selectedDate.set(Calendar.HOUR_OF_DAY, 0);
                 selectedDate.set(Calendar.MINUTE, 0);
                 selectedDate.set(Calendar.SECOND, 0);
                 selectedDate.set(Calendar.MILLISECOND, 0);
                 fromDate = selectedDate.getTimeInMillis();
-                ((MaterialButton) findViewById(R.id.fromDateButton))
-                        .setText(new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                                .format(new Date(fromDate)));
             } else {
                 selectedDate.set(Calendar.HOUR_OF_DAY, 23);
                 selectedDate.set(Calendar.MINUTE, 59);
                 selectedDate.set(Calendar.SECOND, 59);
                 selectedDate.set(Calendar.MILLISECOND, 999);
                 toDate = selectedDate.getTimeInMillis();
-                ((MaterialButton) findViewById(R.id.toDateButton))
-                        .setText(new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                                .format(new Date(toDate)));
             }
 
+            updateDateButtonTexts();
             preferencesManager.saveSelectedDateRange(fromDate, toDate);
+            resetPagination();
 
-            // Update transactions for new date range using callback
-            viewModel.getTransactionsBetweenDates(fromDate, toDate, transactions -> {
-                if (transactions != null && !transactions.isEmpty()) {
-                    updateTransactionsList(transactions);
-                } else {
-                    adapter.setTransactions(new ArrayList<>());
-                    updateSummary(new ArrayList<>());
-                }
-            });
-        }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH),
-                calendar.get(Calendar.DAY_OF_MONTH)).show();
+        }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH));
+
+        datePickerDialog.show();
+    }
+
+    private void updateDateButtonTexts() {
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
+
+        MaterialButton fromDateButton = findViewById(R.id.fromDateButton);
+        if (fromDateButton != null) {
+            fromDateButton.setText(dateFormat.format(new Date(fromDate)));
+        }
+
+        MaterialButton toDateButton = findViewById(R.id.toDateButton);
+        if (toDateButton != null) {
+            toDateButton.setText(dateFormat.format(new Date(toDate)));
+        }
+    }
+
+    private void setupDefaultDates() {
+        fromDate = preferencesManager.getFromDate();
+        toDate = preferencesManager.getToDate();
+
+        // If dates haven't been set before, use default dates
+        if (fromDate == 0 || toDate == 0) {
+            Calendar calendar = Calendar.getInstance();
+
+            // Set To Date as current date
+            calendar.set(Calendar.HOUR_OF_DAY, 23);
+            calendar.set(Calendar.MINUTE, 59);
+            calendar.set(Calendar.SECOND, 59);
+            toDate = calendar.getTimeInMillis();
+
+            // Set From Date as 1st of current month
+            calendar.set(Calendar.DAY_OF_MONTH, 1);
+            calendar.set(Calendar.HOUR_OF_DAY, 0);
+            calendar.set(Calendar.MINUTE, 0);
+            calendar.set(Calendar.SECOND, 0);
+            fromDate = calendar.getTimeInMillis();
+
+            // Save these dates
+            preferencesManager.saveSelectedDateRange(fromDate, toDate);
+        }
+
+        // Update button texts
+        updateDateButtonTexts();
     }
 
     private void loadExistingSMS() {
-        Log.d("MainActivity", "Loading SMS between dates: " + new Date(fromDate) + " to " + new Date(toDate));
+        Log.d(TAG, "Loading SMS between dates: " + new Date(fromDate) + " to " + new Date(toDate));
 
         preferencesManager.saveSelectedDateRange(fromDate, toDate);
+
+        if (loadingIndicator != null) {
+            loadingIndicator.setVisibility(View.VISIBLE);
+        }
 
         executorService.execute(() -> {
             // First, process new SMS messages
             processSMSMessages();
 
-            // Debug transaction retrieval
-            debugTransactionRetrieval();
-
             // Retrieve transactions
-            List<Transaction> transactions = TransactionDatabase.getInstance(this)
-                    .transactionDao()
-                    .getTransactionsBetweenDatesSync(fromDate, toDate);
-
-            // Then, update the transaction list with transactions in the date range
             runOnUiThread(() -> {
-                // This will trigger the observer in setupViewModel()
-//                viewModel.getTransactionsBetweenDates(fromDate, toDate);
-                if (transactions != null && !transactions.isEmpty()) {
-                    updateTransactionsList(transactions);
-                    updateSummary(transactions);
-                } else {
-                    // Handle empty list
-                    adapter.setTransactions(new ArrayList<>());
-                    updateSummary(new ArrayList<>());
-                    Toast.makeText(this, "No transactions found", Toast.LENGTH_SHORT).show();
+                // Hide loading indicator
+                if (loadingIndicator != null) {
+                    loadingIndicator.setVisibility(View.GONE);
                 }
+
+                // Reset pagination to load fresh data
+                resetPagination();
             });
         });
     }
@@ -1327,34 +1391,49 @@ public class MainActivity extends AppCompatActivity {
                 String.valueOf(toDate)
         };
 
-        Cursor cursor = getContentResolver().query(
-                Telephony.Sms.CONTENT_URI,
-                null,
-                selection,
-                selectionArgs,
-                Telephony.Sms.DATE + " DESC"
-        );
+        Cursor cursor = null;
+        try {
+            cursor = getContentResolver().query(
+                    Telephony.Sms.CONTENT_URI,
+                    null,
+                    selection,
+                    selectionArgs,
+                    Telephony.Sms.DATE + " DESC"
+            );
 
-        if (cursor != null) {
-            EnhancedSMSReceiver receiver = new EnhancedSMSReceiver();
-            int count = 0;
-            while (cursor.moveToNext()) {
-                String messageBody = cursor.getString(cursor.getColumnIndex(Telephony.Sms.BODY));
-                long messageDate = cursor.getLong(cursor.getColumnIndex(Telephony.Sms.DATE));
+            if (cursor != null) {
+                EnhancedSMSReceiver receiver = new EnhancedSMSReceiver();
+                int count = 0;
+                while (cursor.moveToNext()) {
+                    int bodyIndex = cursor.getColumnIndex(Telephony.Sms.BODY);
+                    int dateIndex = cursor.getColumnIndex(Telephony.Sms.DATE);
 
-                Log.d("MainActivity", "Message date: " + new Date(messageDate) + "\nContent: " + messageBody);
+                    // Skip if column indices are invalid
+                    if (bodyIndex < 0 || dateIndex < 0) continue;
 
-                if (messageDate >= fromDate && messageDate <= toDate) {
-                    receiver.parseAndSaveTransaction(this, messageBody, null, messageDate);
-                    count++;
+                    String messageBody = cursor.getString(bodyIndex);
+                    long messageDate = cursor.getLong(dateIndex);
+
+                    if (messageDate >= fromDate && messageDate <= toDate) {
+                        receiver.parseAndSaveTransaction(this, messageBody, null, messageDate);
+                        count++;
+                    }
                 }
-            }
-            cursor.close();
 
-            final int processedCount = count;
+                final int processedCount = count;
+                runOnUiThread(() -> {
+                    Toast.makeText(this, "Processed " + processedCount + " messages", Toast.LENGTH_SHORT).show();
+                });
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error processing SMS messages", e);
             runOnUiThread(() -> {
-                Toast.makeText(this, "Processed " + processedCount + " messages", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Error processing SMS: " + e.getMessage(), Toast.LENGTH_SHORT).show();
             });
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
         }
     }
 
@@ -1375,18 +1454,52 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void setupBottomNavigation() {
+        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
+        if (bottomNav == null) return;
+
+        bottomNav.setSelectedItemId(R.id.nav_home);
+        bottomNav.setOnItemSelectedListener(item -> {
+            switch (item.getItemId()) {
+                case R.id.nav_home:
+                    return true;
+                case R.id.nav_analytics:
+                    startActivity(new Intent(this, AnalyticsActivity.class));
+                    return true;
+                case R.id.nav_predictions:
+                    startActivity(new Intent(this, PredictionActivity.class));
+                    return true;
+                case R.id.nav_groups:
+                    startActivity(new Intent(this, GroupedExpensesActivity.class));
+                    return true;
+                case R.id.nav_excluded:
+                    startActivity(new Intent(this, ExcludedTransactionsActivity.class));
+                    return true;
+            }
+            return false;
+        });
+    }
+
     @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == SMS_PERMISSION_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Permission granted, now set up dates and load SMS
-                setupDefaultDates();
+                Toast.makeText(this, "SMS permissions granted", Toast.LENGTH_SHORT).show();
+                loadExistingSMS();
             } else {
                 Toast.makeText(this, "SMS permissions are required for this app to work",
                         Toast.LENGTH_LONG).show();
             }
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // Refresh data when coming back to this activity
+        updateTransactionsList();
     }
 
     @Override
@@ -1396,102 +1509,5 @@ public class MainActivity extends AppCompatActivity {
         if (executorService != null) {
             executorService.shutdown();
         }
-    }
-
-    /**
-     * Add this method to MainActivity.java
-     */
-    private void checkAutoExcludedTransactions() {
-        viewModel.getAutoExcludedCount(count -> {
-            if (count > 0) {
-                // Show dialog
-                AutoExcludedTransactionsDialog dialog = new AutoExcludedTransactionsDialog(count);
-                dialog.setListener(new AutoExcludedTransactionsDialog.OnActionSelectedListener() {
-                    @Override
-                    public void onIncludeAllSelected() {
-                        // Include all auto-excluded transactions
-                        includeAllAutoExcludedTransactions();
-                    }
-
-                    @Override
-                    public void onReviewSelected() {
-                        // Navigate to a screen showing only auto-excluded transactions
-                        // This could be a new activity or a filtered view
-                        showAutoExcludedTransactions();
-                    }
-                });
-                dialog.show(getSupportFragmentManager(), "auto_excluded_dialog");
-            }
-        });
-    }
-
-    /**
-     * Include all auto-excluded transactions
-     */
-    private void includeAllAutoExcludedTransactions() {
-        TransactionRepository repository = new TransactionRepository(getApplication());
-        repository.includeAllAutoExcludedTransactions(count -> {
-            if (count > 0) {
-                Toast.makeText(this, count + " transaction(s) have been included", Toast.LENGTH_SHORT).show();
-                // Refresh the transaction list
-                updateTransactionsList();
-            }
-        });
-    }
-
-    /**
-     * Show only auto-excluded transactions
-     * This is a simple implementation that filters the current view
-     * A more complete implementation would create a separate screen
-     */
-    private void showAutoExcludedTransactions() {
-        // Update UI to show we're in "filtering mode"
-        TextView filterIndicator = findViewById(R.id.filterIndicator);
-        if (filterIndicator != null) {
-            filterIndicator.setVisibility(View.VISIBLE);
-            filterIndicator.setText("Showing auto-excluded transactions only");
-        }
-
-        // Reset other filters
-        bankSpinner.setText("All Banks", false);
-        typeSpinner.setText("All Types", false);
-
-        // Get and display auto-excluded transactions
-        TransactionRepository repository = new TransactionRepository(getApplication());
-        repository.getAutoExcludedTransactions(transactions -> {
-            adapter.setTransactions(transactions);
-
-            // Update count text
-            TextView resultCount = findViewById(R.id.resultCount);
-            if (resultCount != null) {
-                resultCount.setVisibility(View.VISIBLE);
-                resultCount.setText(transactions.size() + " auto-excluded transaction(s)");
-            }
-
-            // Add a "clear filter" button
-            Button clearFilterButton = findViewById(R.id.clearFilterButton);
-            if (clearFilterButton != null) {
-                clearFilterButton.setVisibility(View.VISIBLE);
-                clearFilterButton.setOnClickListener(v -> {
-                    // Reset and show all transactions
-                    updateTransactionsList();
-
-                    // Hide filter UI
-                    filterIndicator.setVisibility(View.GONE);
-                    resultCount.setVisibility(View.GONE);
-                    clearFilterButton.setVisibility(View.GONE);
-                });
-            }
-        });
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-
-        // Refresh the badge count on bottom navigation
-        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
-        bottomNav.setSelectedItemId(R.id.nav_home); // Change this ID for each activity
-        checkForExcludedTransactions(bottomNav);
     }
 }
