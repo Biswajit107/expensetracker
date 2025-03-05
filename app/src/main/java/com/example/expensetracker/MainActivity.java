@@ -294,12 +294,13 @@ public class MainActivity extends AppCompatActivity {
 
             List<Transaction> nextPageTransactions;
 
-            if (currentFilterState.showingExcluded) {
-                // Load all transactions if explicitly showing excluded ones
-                nextPageTransactions = viewModel.getTransactionsBetweenDatesPaginatedSync(
+            // Check if we're viewing manually excluded transactions
+            if (currentFilterState.viewingManuallyExcluded) {
+                nextPageTransactions = viewModel.getManuallyExcludedTransactionsPaginatedSync(
                         fromDate, toDate, PAGE_SIZE, offset);
-            } else {
-                // Only load non-excluded transactions
+            }
+            // Otherwise, load regular transactions
+            else {
                 nextPageTransactions = viewModel.getNonExcludedTransactionsBetweenDatesPaginatedSync(
                         fromDate, toDate, PAGE_SIZE, offset);
             }
@@ -315,17 +316,17 @@ public class MainActivity extends AppCompatActivity {
 
                 if (finalNextPageTransactions != null && !finalNextPageTransactions.isEmpty()) {
                     // Add new items to adapter
-                    adapter.addTransactions(nextPageTransactions);
+                    adapter.addTransactions(finalNextPageTransactions);
 
                     // Add to all transactions list for filtering
-                    allTransactions.addAll(nextPageTransactions);
+                    allTransactions.addAll(finalNextPageTransactions);
 
                     // Update empty state view
                     if (emptyStateText != null) {
                         emptyStateText.setVisibility(View.GONE);
                     }
                 } else if (adapter.getItemCount() == 0 && emptyStateText != null) {
-                    // Show empty state if no transactions
+                    // Show empty state
                     emptyStateText.setVisibility(View.VISIBLE);
                 }
 
@@ -495,12 +496,24 @@ public class MainActivity extends AppCompatActivity {
             categoryFilterChipGroup.addView(chip);
         }
 
+        // Add "Manually Excluded" chip - special filter
+        Chip excludedChip = new Chip(this);
+        excludedChip.setText("Manually Excluded");
+        excludedChip.setCheckable(true);
+
+        // Set a distinctive purple color for the excluded transactions filter
+        excludedChip.setChipBackgroundColor(ColorStateList.valueOf(getColor(R.color.purple_light)));
+        excludedChip.setTextColor(getColor(R.color.white));
+
+        categoryFilterChipGroup.addView(excludedChip);
+
         // Set listener for chip selection
         categoryFilterChipGroup.setOnCheckedChangeListener((group, checkedId) -> {
             // Find which chip is selected
             if (checkedId == View.NO_ID) {
                 // No chip selected, show all categories
-                filterTransactionsByCategory(null);
+                currentFilterState.viewingManuallyExcluded = false;
+                resetPagination();
                 return;
             }
 
@@ -510,12 +523,120 @@ public class MainActivity extends AppCompatActivity {
 
                 // If "All Categories" is selected, don't filter by category
                 if ("All Categories".equals(selectedCategory)) {
+                    currentFilterState.viewingManuallyExcluded = false;
                     filterTransactionsByCategory(null);
-                } else {
+                }
+                // Special handling for "Manually Excluded" filter
+                else if ("Manually Excluded".equals(selectedCategory)) {
+                    loadManuallyExcludedTransactions();
+                }
+                // Regular category filtering
+                else {
+                    currentFilterState.viewingManuallyExcluded = false;
                     filterTransactionsByCategory(selectedCategory);
                 }
             }
         });
+    }
+
+    private void loadManuallyExcludedTransactions() {
+        // Update filter state
+        currentFilterState.viewingManuallyExcluded = true;
+
+        // Clear existing data
+        adapter.clearTransactions();
+        allTransactions.clear();
+        currentPage = 0;
+        hasMoreData = true;
+
+        // Show loading indicator
+        if (loadingIndicator != null) {
+            loadingIndicator.setVisibility(View.VISIBLE);
+        }
+
+        // Load manually excluded transactions
+        executorService.execute(() -> {
+            // Get manually excluded transactions
+            List<Transaction> manuallyExcludedTransactions = viewModel.getManuallyExcludedTransactionsPaginatedSync(
+                    fromDate, toDate, PAGE_SIZE, 0);
+
+            // Update UI
+            runOnUiThread(() -> {
+                if (loadingIndicator != null) {
+                    loadingIndicator.setVisibility(View.GONE);
+                }
+
+                if (manuallyExcludedTransactions != null && !manuallyExcludedTransactions.isEmpty()) {
+                    adapter.setTransactions(manuallyExcludedTransactions);
+                    allTransactions.addAll(manuallyExcludedTransactions);
+
+                    // Update filter indicator
+                    if (filterIndicatorContainer != null) {
+                        filterIndicatorContainer.setVisibility(View.VISIBLE);
+                        filterIndicator.setText("Viewing: Manually Excluded Transactions");
+
+                        if (resultCount != null) {
+                            resultCount.setText(String.format(Locale.getDefault(),
+                                    "%d transaction(s) found", manuallyExcludedTransactions.size()));
+                        }
+                    }
+
+                    // Hide empty state
+                    if (emptyStateText != null) {
+                        emptyStateText.setVisibility(View.GONE);
+                    }
+                } else {
+                    // Show empty state
+                    if (emptyStateText != null) {
+                        emptyStateText.setVisibility(View.VISIBLE);
+                        emptyStateText.setText("No manually excluded transactions found");
+                    }
+
+                    // Update filter indicator
+                    if (filterIndicatorContainer != null) {
+                        filterIndicatorContainer.setVisibility(View.VISIBLE);
+                        filterIndicator.setText("Viewing: Manually Excluded Transactions");
+
+                        if (resultCount != null) {
+                            resultCount.setText("0 transactions found");
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+
+    private void filterManuallyExcludedTransactions() {
+        // Update filter state - we use a special marker in currentFilterState
+        currentFilterState.category = null; // Not filtering by regular category
+        currentFilterState.filterManuallyExcluded = true; // Set our new flag
+
+        // Apply filter to show only manually excluded transactions
+        List<Transaction> filteredTransactions = new ArrayList<>();
+
+        for (Transaction transaction : allTransactions) {
+            // Show only manually excluded transactions (excluded but not auto-excluded)
+            if (transaction.isExcludedFromTotal() && !transaction.isOtherDebit()) {
+                filteredTransactions.add(transaction);
+            }
+        }
+
+        // Update adapter with filtered list
+        adapter.setTransactions(filteredTransactions);
+
+        // Update filter indicator UI
+        if (filterIndicatorContainer != null) {
+            filterIndicatorContainer.setVisibility(View.VISIBLE);
+            filterIndicator.setText("Filtered by: Manually Excluded Transactions");
+
+            if (resultCount != null) {
+                resultCount.setText(String.format(Locale.getDefault(),
+                        "%d transaction(s) found", filteredTransactions.size()));
+            }
+        }
+
+        // Don't update summary with these transactions - they're excluded from totals
     }
 
     private void filterTransactionsByCategory(String category) {
@@ -1541,15 +1662,11 @@ public class MainActivity extends AppCompatActivity {
         BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
         bottomNav.setSelectedItemId(R.id.nav_home);
 
-        // If filter state includes showing excluded transactions, just refresh the current view
-        // Otherwise, reset to show only non-excluded transactions
-        if (currentFilterState.showingExcluded) {
-            // Just refresh current view with current filters
-            List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
-            adapter.setTransactions(filteredTransactions);
-            updateSummary(filteredTransactions);
+        // If we're viewing manually excluded transactions, refresh that view
+        if (currentFilterState.viewingManuallyExcluded) {
+            loadManuallyExcludedTransactions();
         } else {
-            // Reset pagination and reload non-excluded transactions
+            // Otherwise, refresh the regular transactions view
             resetPagination();
         }
     }
@@ -1572,18 +1689,21 @@ public class MainActivity extends AppCompatActivity {
         private double maxAmount = 100000;
         private boolean showingExcluded = false;
         private int sortOption = 0; // 0 = Date (newest first)
+        private boolean filterManuallyExcluded = false; // NEW PROPERTY
+        private boolean viewingManuallyExcluded = false;
 
-        // Returns true if any filter is active
+        // Update the isAnyFilterActive method
         public boolean isAnyFilterActive() {
             return !bank.equals("All Banks") ||
                     !type.equals("All Types") ||
                     category != null ||
                     !searchQuery.isEmpty() ||
                     minAmount > 0 ||
-                    maxAmount < 100000;
+                    maxAmount < 100000 ||
+                    filterManuallyExcluded; // Include our new property here
         }
 
-        // Apply the current filters to a list of transactions
+        // Update the applyFilters method to handle the new property
         public List<Transaction> applyFilters(List<Transaction> transactions) {
             if (transactions == null) return new ArrayList<>();
 
@@ -1591,6 +1711,17 @@ public class MainActivity extends AppCompatActivity {
 
             for (Transaction transaction : transactions) {
                 boolean shouldInclude = true;
+
+                // Special case: If filtering manually excluded transactions
+                if (filterManuallyExcluded) {
+                    // Only include manually excluded transactions
+                    shouldInclude = transaction.isExcludedFromTotal() && !transaction.isOtherDebit();
+
+                    // No need to check other filters if this doesn't match
+                    if (!shouldInclude) {
+                        continue;
+                    }
+                }
 
                 // Apply bank filter
                 if (!bank.equals("All Banks") && !bank.equals(transaction.getBank())) {
@@ -1602,8 +1733,8 @@ public class MainActivity extends AppCompatActivity {
                     shouldInclude = false;
                 }
 
-                // Apply category filter
-                if (shouldInclude && category != null && !category.isEmpty() &&
+                // Apply category filter (only if not filtering for manually excluded)
+                if (shouldInclude && !filterManuallyExcluded && category != null && !category.isEmpty() &&
                         !category.equals(transaction.getCategory())) {
                     shouldInclude = false;
                 }
@@ -1614,8 +1745,8 @@ public class MainActivity extends AppCompatActivity {
                     shouldInclude = false;
                 }
 
-                // Apply exclusion filter
-                if (shouldInclude && transaction.isExcludedFromTotal() && !showingExcluded) {
+                // Apply exclusion filter (but skip this check if we're explicitly filtering for manually excluded)
+                if (shouldInclude && !filterManuallyExcluded && transaction.isExcludedFromTotal() && transaction.isOtherDebit() && !showingExcluded) {
                     shouldInclude = false;
                 }
 

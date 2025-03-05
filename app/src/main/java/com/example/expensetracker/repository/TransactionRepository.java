@@ -184,4 +184,11 @@ public class TransactionRepository {
         return transactionDao.getNonExcludedTransactionsBetweenDatesPaginatedSync(startDate, endDate, limit, offset);
     }
 
+    /**
+     * Get paginated list of manually excluded transactions between dates
+     */
+    public List<Transaction> getManuallyExcludedTransactionsPaginatedSync(long startDate, long endDate, int limit, int offset) {
+        return transactionDao.getManuallyExcludedTransactionsPaginatedSync(startDate, endDate, limit, offset);
+    }
+
 }

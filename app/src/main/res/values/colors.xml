@@ -52,6 +52,9 @@
     <color name="category_transport">#FF9800</color>
     <color name="category_health">#E91E63</color>
     <color name="category_education">#3F51B5</color>
+    <color name="purple">#673AB7</color>
+    <color name="purple_light">#9575CD</color>
+    <color name="purple_dark">#512DA8</color>
 
     <!-- Chart colors -->
     <array name="chart_colors">

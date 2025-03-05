@@ -248,8 +248,13 @@ public interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE date BETWEEN :startDate AND :endDate ORDER BY date DESC LIMIT :limit OFFSET :offset")
     List<Transaction> getTransactionsBetweenDatesPaginatedSync(long startDate, long endDate, int limit, int offset);
 
+    // Updated query to exclude ALL excluded transactions (both auto and manual)
     @Query("SELECT * FROM transactions WHERE date BETWEEN :startDate AND :endDate AND is_excluded_from_total = 0 ORDER BY date DESC LIMIT :limit OFFSET :offset")
     List<Transaction> getNonExcludedTransactionsBetweenDatesPaginatedSync(long startDate, long endDate, int limit, int offset);
+
+    // New query to get only manually excluded transactions
+    @Query("SELECT * FROM transactions WHERE date BETWEEN :startDate AND :endDate AND is_excluded_from_total = 1 AND is_other_debit = 0 ORDER BY date DESC LIMIT :limit OFFSET :offset")
+    List<Transaction> getManuallyExcludedTransactionsPaginatedSync(long startDate, long endDate, int limit, int offset);
 
 
 }
