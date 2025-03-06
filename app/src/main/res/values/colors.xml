@@ -55,6 +55,9 @@
     <color name="purple">#673AB7</color>
     <color name="purple_light">#9575CD</color>
     <color name="purple_dark">#512DA8</color>
+    <!-- Add these color definitions -->
+    <color name="info_background">#E3F2FD</color> <!-- Light blue background -->
+    <color name="info_text">#0D47A1</color> <!-- Dark blue text for contrast -->
 
     <!-- Chart colors -->
     <array name="chart_colors">

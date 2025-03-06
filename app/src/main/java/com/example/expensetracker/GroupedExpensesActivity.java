@@ -113,8 +113,12 @@ public class GroupedExpensesActivity extends AppCompatActivity implements Groupe
                     return true;
                 case R.id.nav_groups:
                     return true;
-                case R.id.nav_excluded:
-                    startActivity(new Intent(this, ExcludedTransactionsActivity.class));
+//                case R.id.nav_excluded:
+//                    startActivity(new Intent(this, ExcludedTransactionsActivity.class));
+//                    return true;
+
+                case R.id.nav_patterns:
+                    startActivity(new Intent(this, ExclusionPatternsActivity.class));
                     return true;
             }
             return false;

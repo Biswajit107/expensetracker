@@ -7,15 +7,20 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
+import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.DialogFragment;
+import androidx.lifecycle.ViewModelProvider;
 
 import com.example.expensetracker.R;
 import com.example.expensetracker.models.Transaction;
+import com.example.expensetracker.viewmodel.ExclusionPatternViewModel;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.TextInputEditText;
@@ -23,11 +28,14 @@ import com.google.android.material.textfield.TextInputEditText;
 public class TransactionEditDialog extends DialogFragment {
     private Transaction transaction;
     private OnTransactionEditListener listener;
+    private ExclusionPatternViewModel patternViewModel;
 
     // Input views
     private TextInputEditText descriptionInput;
     private AutoCompleteTextView categoryInput;
     private SwitchMaterial excludeSwitch;
+    private LinearLayout patternOptionLayout;
+    private SwitchMaterial createPatternSwitch;
 
     public interface OnTransactionEditListener {
         void onTransactionEdited(Transaction transaction);
@@ -40,8 +48,6 @@ public class TransactionEditDialog extends DialogFragment {
     public void setOnTransactionEditListener(OnTransactionEditListener listener) {
         this.listener = listener;
     }
-
-    // In TransactionEditDialog.java
 
     @NonNull
     @Override
@@ -59,7 +65,11 @@ public class TransactionEditDialog extends DialogFragment {
         MaterialButton cancelButton = view.findViewById(R.id.cancelButton);
         MaterialButton saveButton = view.findViewById(R.id.saveButton);
 
-        // Add a new button to view original SMS
+        // NEW: Add pattern option layout and switch
+        patternOptionLayout = view.findViewById(R.id.patternOptionLayout);
+        createPatternSwitch = view.findViewById(R.id.createPatternSwitch);
+
+        // Add a button to view original SMS
         MaterialButton viewSmsButton = view.findViewById(R.id.viewSmsButton);
 
         // Show or hide button based on whether original SMS is available
@@ -78,15 +88,29 @@ public class TransactionEditDialog extends DialogFragment {
         // Populate data
         populateTransactionData();
 
+        // NEW: Set up exclusion pattern option visibility based on exclude switch
+        excludeSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            updatePatternOptionVisibility(isChecked);
+        });
+
         // Setup buttons
         cancelButton.setOnClickListener(v -> dismiss());
         saveButton.setOnClickListener(v -> {
             updateTransaction();
+
+            // NEW: Create exclusion pattern if option is selected
+            if (excludeSwitch.isChecked() && createPatternSwitch.isChecked()) {
+                createExclusionPattern();
+            }
+
             if (listener != null) {
                 listener.onTransactionEdited(transaction);
             }
             dismiss();
         });
+
+        // Initialize pattern ViewModel
+        patternViewModel = new ViewModelProvider(requireActivity()).get(ExclusionPatternViewModel.class);
 
         // Build the dialog
         builder.setView(view);
@@ -126,6 +150,32 @@ public class TransactionEditDialog extends DialogFragment {
             descriptionInput.setText(transaction.getDescription());
             categoryInput.setText(transaction.getCategory(), false);
             excludeSwitch.setChecked(transaction.isExcludedFromTotal());
+
+            // Update pattern option visibility
+            updatePatternOptionVisibility(transaction.isExcludedFromTotal());
+        }
+    }
+
+    /**
+     * Update visibility of pattern creation option based on exclude state
+     */
+    private void updatePatternOptionVisibility(boolean excludeChecked) {
+        if (patternOptionLayout != null) {
+            if (excludeChecked && !transaction.isOtherDebit()) {
+                patternOptionLayout.setVisibility(View.VISIBLE);
+
+                // Default to checked
+                if (createPatternSwitch != null) {
+                    createPatternSwitch.setChecked(true);
+                }
+            } else {
+                patternOptionLayout.setVisibility(View.GONE);
+
+                // Reset switch
+                if (createPatternSwitch != null) {
+                    createPatternSwitch.setChecked(false);
+                }
+            }
         }
     }
 
@@ -133,7 +183,44 @@ public class TransactionEditDialog extends DialogFragment {
         if (transaction != null) {
             transaction.setDescription(descriptionInput.getText().toString());
             transaction.setCategory(categoryInput.getText().toString());
-            transaction.setExcludedFromTotal(excludeSwitch.isChecked());
+
+            // Store previous excluded state to detect changes
+            boolean wasExcluded = transaction.isExcludedFromTotal();
+            boolean nowExcluded = excludeSwitch.isChecked();
+
+            transaction.setExcludedFromTotal(nowExcluded);
+
+            // Set exclusion source if changed
+            if (!wasExcluded && nowExcluded) {
+                // Newly excluded - mark as manual
+                transaction.setExclusionSource("MANUAL");
+            } else if (wasExcluded && !nowExcluded) {
+                // No longer excluded - reset source
+                transaction.setExclusionSource("NONE");
+            }
         }
+    }
+
+    /**
+     * Create an exclusion pattern from the current transaction
+     */
+    private void createExclusionPattern() {
+        if (transaction == null) return;
+
+        // Create pattern in ViewModel
+        patternViewModel.createPatternFromTransaction(transaction);
+
+        // Observe result
+        patternViewModel.getPatternCreationResult().observe(this, result -> {
+            if (result != null && result) {
+                Toast.makeText(requireContext(),
+                        "Exclusion pattern created. Similar transactions will be auto-excluded.",
+                        Toast.LENGTH_LONG).show();
+            } else if (result != null) {
+                Toast.makeText(requireContext(),
+                        "Failed to create exclusion pattern",
+                        Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 }

@@ -1,5 +1,6 @@
 package com.example.expensetracker.receivers;
 
+import android.app.Application;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -9,21 +10,26 @@ import android.util.Log;
 
 import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.database.TransactionDatabase;
+import com.example.expensetracker.models.ExclusionPattern;
 import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.parser.ConfidenceScoreTransactionParser;
 import com.example.expensetracker.parser.EnhancedTransactionParser;
-import com.example.expensetracker.parser.ImprovedTransactionParser;
+import com.example.expensetracker.repository.ExclusionPatternRepository;
 import com.example.expensetracker.utils.PreferencesManager;
 import com.example.expensetracker.utils.TransactionDuplicateDetector;
 
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Enhanced SMS Receiver that uses the new EnhancedTransactionParser
- * for better detection of bank transaction messages
+ * for better detection of bank transaction messages, along with
+ * learned exclusion pattern matching
  */
 public class EnhancedSMSReceiver extends BroadcastReceiver {
     private static final String TAG = "EnhancedSMSReceiver";
@@ -82,25 +88,106 @@ public class EnhancedSMSReceiver extends BroadcastReceiver {
                     return;
                 }
 
-                // NEW CODE: Auto-exclude transactions from unknown banks
-                if ("OTHER".equals(transaction.getBank())) {
+                // NEW STEP: Check against exclusion patterns
+                checkAgainstExclusionPatterns(context, transaction);
+
+            } catch (Exception e) {
+                Log.e(TAG, "Error processing transaction", e);
+            }
+        });
+    }
+
+    /**
+     * Check transaction against learned exclusion patterns
+     * This method checks if the transaction matches any exclusion pattern
+     * and marks it as excluded if a match is found
+     */
+    private void checkAgainstExclusionPatterns(Context context, Transaction transaction) {
+        // Create pattern repository
+        ExclusionPatternRepository patternRepository = new ExclusionPatternRepository(getApplication(context));
+
+        // Create a latch to wait for the async result
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<ExclusionPattern> matchingPattern = new AtomicReference<>(null);
+
+        // Check for matching patterns
+        patternRepository.checkForPatternMatch(transaction, pattern -> {
+            matchingPattern.set(pattern);
+            latch.countDown();
+        });
+
+        try {
+            // Wait for the check to complete (with a timeout)
+            boolean completed = latch.await(2, TimeUnit.SECONDS);
+
+            if (completed) {
+                if (matchingPattern.get() != null) {
+                    // Found a matching pattern - mark transaction as excluded
                     transaction.setExcludedFromTotal(true);
-                    transaction.setOtherDebit(true); // Mark as "other" transaction for UI distinction
-                    Log.d(TAG, "Auto-excluded transaction from unknown bank: " + transaction.getDescription());
+
+                    // Set exclusion source to AUTO
+                    transaction.setExclusionSource("AUTO");
+
+                    Log.d(TAG, "Auto-excluded transaction based on learned pattern: " +
+                            transaction.getDescription());
+                } else {
+                    // No matching pattern, continue with normal processing
+
+                    // Handle unknown bank auto-exclusion (existing logic)
+                    if ("OTHER".equals(transaction.getBank())) {
+                        transaction.setExcludedFromTotal(true);
+                        transaction.setOtherDebit(true);
+                        transaction.setExclusionSource("AUTO_UNKNOWN_BANK");
+                        Log.d(TAG, "Auto-excluded transaction from unknown bank: " + transaction.getDescription());
+                    } else {
+                        // Normal transaction, not excluded
+                        transaction.setExclusionSource("NONE");
+                    }
                 }
 
-                // Step 5: Save the transaction
+                // Save the transaction
                 saveTransaction(context, transaction);
                 Log.d(TAG, "Successfully saved transaction: " + transaction.getDescription() +
                         ", amount: " + transaction.getAmount() +
                         (transaction.isExcludedFromTotal() ? " (excluded)" : ""));
 
-                // Step 6: Update last sync time
+                // Update last sync time
                 new PreferencesManager(context).setLastSyncTime(System.currentTimeMillis());
-            } catch (Exception e) {
-                Log.e(TAG, "Error processing transaction", e);
+            } else {
+                // Timeout occurred - proceed with normal behavior
+                if ("OTHER".equals(transaction.getBank())) {
+                    transaction.setExcludedFromTotal(true);
+                    transaction.setOtherDebit(true);
+                    transaction.setExclusionSource("AUTO_UNKNOWN_BANK");
+                }
+
+                saveTransaction(context, transaction);
+                Log.d(TAG, "Timeout occurred while checking patterns, saved with default behavior: " +
+                        transaction.getDescription());
             }
-        });
+        } catch (InterruptedException e) {
+            Log.e(TAG, "Interrupted while checking exclusion patterns", e);
+            Thread.currentThread().interrupt();
+
+            // Save transaction with default behavior
+            if ("OTHER".equals(transaction.getBank())) {
+                transaction.setExcludedFromTotal(true);
+                transaction.setOtherDebit(true);
+                transaction.setExclusionSource("AUTO_UNKNOWN_BANK");
+            }
+
+            saveTransaction(context, transaction);
+        }
+    }
+
+    /**
+     * Utility method to get Application from context
+     */
+    private Application getApplication(Context context) {
+        if (context.getApplicationContext() instanceof Application) {
+            return (Application) context.getApplicationContext();
+        }
+        throw new IllegalStateException("Could not get application instance");
     }
 
     /**

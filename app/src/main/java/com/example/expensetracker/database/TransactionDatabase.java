@@ -4,6 +4,8 @@ import android.content.Context;
 import androidx.room.Database;
 import androidx.room.Room;
 import androidx.room.RoomDatabase;
+
+import com.example.expensetracker.models.ExclusionPattern;
 import com.example.expensetracker.models.Transaction;
 
 import android.content.Context;
@@ -15,17 +17,32 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
 
 import com.example.expensetracker.models.Transaction;
 
-@Database(entities = {Transaction.class}, version = 3, exportSchema = false)
+@Database(entities = {Transaction.class, ExclusionPattern.class}, version = 4, exportSchema = false)
 public abstract class TransactionDatabase extends RoomDatabase {
     private static TransactionDatabase instance;
     public abstract TransactionDao transactionDao();
+    public abstract ExclusionPatternDao exclusionPatternDao();
 
     // Define migration from version 2 to 3
-    static final Migration MIGRATION_2_3 = new Migration(2, 3) {
+    static final Migration MIGRATION_3_4 = new Migration(3, 4) {
         @Override
         public void migrate(SupportSQLiteDatabase database) {
-            // Add the original_sms column to the transactions table
-            database.execSQL("ALTER TABLE transactions ADD COLUMN original_sms TEXT");
+            // Add exclusion_source column to transactions
+            database.execSQL("ALTER TABLE transactions ADD COLUMN exclusion_source TEXT DEFAULT 'NONE'");
+
+            // Create the exclusion_patterns table
+            database.execSQL("CREATE TABLE IF NOT EXISTS exclusion_patterns (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "merchant_pattern TEXT, " +
+                    "description_pattern TEXT, " +
+                    "min_amount REAL NOT NULL, " +
+                    "max_amount REAL NOT NULL, " +
+                    "transaction_type TEXT, " +
+                    "category TEXT, " +
+                    "created_date INTEGER NOT NULL, " +
+                    "source_transaction_id INTEGER NOT NULL, " +
+                    "pattern_matches_count INTEGER NOT NULL DEFAULT 0, " +
+                    "is_active INTEGER NOT NULL DEFAULT 1)");
         }
     };
 
@@ -36,7 +53,7 @@ public abstract class TransactionDatabase extends RoomDatabase {
                             TransactionDatabase.class,
                             "transaction_database"
                     )
-                    .addMigrations(MIGRATION_2_3) // Add the migration to the builder
+                    .addMigrations(MIGRATION_3_4) // Add the migration to the builder
                     .fallbackToDestructiveMigration()
                     .build();
         }

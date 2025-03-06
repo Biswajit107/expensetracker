@@ -1633,8 +1633,11 @@ public class MainActivity extends AppCompatActivity {
                 case R.id.nav_groups:
                     startActivity(new Intent(this, GroupedExpensesActivity.class));
                     return true;
-                case R.id.nav_excluded:
-                    startActivity(new Intent(this, ExcludedTransactionsActivity.class));
+//                case R.id.nav_excluded:
+//                    startActivity(new Intent(this, ExcludedTransactionsActivity.class));
+//                    return true;
+                case R.id.nav_patterns:
+                    startActivity(new Intent(this, ExclusionPatternsActivity.class));
                     return true;
             }
             return false;

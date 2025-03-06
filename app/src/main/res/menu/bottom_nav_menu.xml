@@ -20,8 +20,14 @@
         android:icon="@drawable/ic_groups"
         android:title="Groups"/>
 
+<!--    <item-->
+<!--        android:id="@+id/nav_excluded"-->
+<!--        android:icon="@drawable/ic_excluded"-->
+<!--        android:title="Excluded"/>-->
+
     <item
-        android:id="@+id/nav_excluded"
-        android:icon="@drawable/ic_excluded"
-        android:title="Excluded"/>
+        android:id="@+id/nav_patterns"
+        android:icon="@drawable/ic_patterns"
+        android:title="Patterns"/>
+
 </menu>

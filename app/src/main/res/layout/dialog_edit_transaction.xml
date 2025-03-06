@@ -48,7 +48,7 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginBottom="16dp">
+        android:layout_marginBottom="8dp">
 
         <TextView
             android:layout_width="0dp"
@@ -63,6 +63,50 @@
             android:layout_height="wrap_content"/>
     </LinearLayout>
 
+    <!-- NEW: Pattern creation option -->
+    <LinearLayout
+        android:id="@+id/patternOptionLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/info_background"
+        android:padding="12dp"
+        android:layout_marginBottom="16dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@drawable/ic_auto"
+                android:layout_marginEnd="8dp"/>
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Create pattern to auto-exclude similar transactions in the future?"
+                android:textSize="14sp"/>
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/createPatternSwitch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textSize="12sp"
+            android:text="This will create a smart exclusion pattern that automatically excludes similar transactions from your totals."/>
+    </LinearLayout>
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -75,7 +119,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:icon="@drawable/ic_message"
-            android:layout_marginEnd="8dp"/>
+            android:layout_marginEnd="8dp"
+            android:text="View SMS"/>
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/cancelButton"
@@ -90,33 +135,4 @@
             android:layout_height="wrap_content"
             android:text="Save"/>
     </LinearLayout>
-
-    <!-- Add this near the bottom of dialog_edit_transaction.xml -->
-<!--    <LinearLayout-->
-<!--        android:layout_width="match_parent"-->
-<!--        android:layout_height="wrap_content"-->
-<!--        android:orientation="horizontal"-->
-<!--        android:gravity="end">-->
-
-<!--        <com.google.android.material.button.MaterialButton-->
-<!--            android:id="@+id/viewSmsButton"-->
-<!--            style="@style/Widget.MaterialComponents.Button.TextButton"-->
-<!--            android:layout_width="wrap_content"-->
-<!--            android:layout_height="wrap_content"-->
-<!--            app:icon="@drawable/ic_message"-->
-<!--            android:layout_marginEnd="8dp"/>-->
-
-<!--        <com.google.android.material.button.MaterialButton-->
-<!--            android:id="@+id/cancelButton"-->
-<!--            style="@style/Widget.MaterialComponents.Button.TextButton"-->
-<!--            android:layout_width="wrap_content"-->
-<!--            android:layout_height="wrap_content"-->
-<!--            android:text="Cancel"/>-->
-
-<!--        <com.google.android.material.button.MaterialButton-->
-<!--            android:id="@+id/saveButton"-->
-<!--            android:layout_width="wrap_content"-->
-<!--            android:layout_height="wrap_content"-->
-<!--            android:text="Save"/>-->
-<!--    </LinearLayout>-->
 </LinearLayout>

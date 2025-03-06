@@ -36,6 +36,10 @@
             android:launchMode="singleTask"
             android:name=".ExcludedTransactionsActivity" />
 
+        <activity
+            android:launchMode="singleTask"
+            android:name=".ExclusionPatternsActivity" />
+
         <receiver
             android:name=".receivers.EnhancedSMSReceiver"
             android:exported="true"

@@ -88,7 +88,7 @@ public class ExcludedTransactionsActivity extends AppCompatActivity {
 
     private void setupBottomNavigation() {
         BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
-        bottomNav.setSelectedItemId(R.id.nav_excluded);
+//        bottomNav.setSelectedItemId(R.id.nav_excluded);
 
         bottomNav.setOnItemSelectedListener(item -> {
             Intent intent;
@@ -114,7 +114,11 @@ public class ExcludedTransactionsActivity extends AppCompatActivity {
                     startActivity(intent);
                     return true;
 
-                case R.id.nav_excluded:
+//                case R.id.nav_excluded:
+//                    return true;
+
+                case R.id.nav_patterns:
+                    startActivity(new Intent(this, ExclusionPatternsActivity.class));
                     return true;
             }
             return false;
@@ -317,7 +321,7 @@ public class ExcludedTransactionsActivity extends AppCompatActivity {
         super.onResume();
 
         // Refresh the badge count on bottom navigation
-        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
-        bottomNav.setSelectedItemId(R.id.nav_excluded); // Change this ID for each activity
+//        BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
+//        bottomNav.setSelectedItemId(R.id.nav_excluded); // Change this ID for each activity
     }
 }

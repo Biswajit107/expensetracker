@@ -63,6 +63,9 @@ public class Transaction {
     @ColumnInfo(name = "original_sms")
     private String originalSms;
 
+    @ColumnInfo(name = "exclusion_source")
+    private String exclusionSource; // "MANUAL", "AUTO", "NONE"
+
     // Constructor
     public Transaction(String bank, String type, double amount, long date, String description) {
         this.bank = bank;
@@ -130,6 +133,9 @@ public class Transaction {
     public boolean isCredit() {
         return "CREDIT".equals(type);
     }
+
+    public String getExclusionSource() { return exclusionSource; }
+    public void setExclusionSource(String exclusionSource) { this.exclusionSource = exclusionSource; }
 
     // For displaying formatted amount
     public String getFormattedAmount() {
