@@ -257,4 +257,7 @@ public interface TransactionDao {
     List<Transaction> getManuallyExcludedTransactionsPaginatedSync(long startDate, long endDate, int limit, int offset);
 
 
+    @Query("SELECT COUNT(*) FROM transactions WHERE date BETWEEN :startDate AND :endDate")
+    int getTransactionCountBetweenDates(long startDate, long endDate);
+
 }

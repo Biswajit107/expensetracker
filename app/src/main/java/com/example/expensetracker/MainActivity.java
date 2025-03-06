@@ -16,6 +16,7 @@ import android.content.res.ColorStateList;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.os.Handler;
 import android.provider.Telephony;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -130,6 +131,17 @@ public class MainActivity extends AppCompatActivity {
         // Check permissions and setup navigation
         checkAndRequestSMSPermissions();
         setupBottomNavigation();
+
+        // Automatically load transactions when the app starts
+        //resetPagination();
+
+        // Check if we need to process SMS messages on first launch
+//        viewModel.hasAnyTransactions(hasTransactions -> {
+//            if (!hasTransactions) {
+//                // If no transactions exist yet, process SMS messages
+//                loadExistingSMS();
+//            }
+//        });
     }
 
     private void initializeViews() {
@@ -321,6 +333,9 @@ public class MainActivity extends AppCompatActivity {
                     // Add to all transactions list for filtering
                     allTransactions.addAll(finalNextPageTransactions);
 
+                    // Update summary with all transactions
+                    updateSummary(allTransactions);
+
                     // Update empty state view
                     if (emptyStateText != null) {
                         emptyStateText.setVisibility(View.GONE);
@@ -343,6 +358,19 @@ public class MainActivity extends AppCompatActivity {
 
         if (adapter != null) {
             adapter.clearTransactions();
+        }
+
+        // Reset summary totals to zero initially
+        if (totalDebitsText != null) {
+            totalDebitsText.setText(String.format(Locale.getDefault(), "₹%.2f", 0.0));
+        }
+
+        if (totalCreditsText != null) {
+            totalCreditsText.setText(String.format(Locale.getDefault(), "₹%.2f", 0.0));
+        }
+
+        if (balanceText != null) {
+            balanceText.setText(String.format(Locale.getDefault(), "₹%.2f", 0.0));
         }
 
         loadMoreTransactions();
@@ -781,7 +809,9 @@ public class MainActivity extends AppCompatActivity {
         fromDate = cal.getTimeInMillis();
 
         updateDateButtonTexts();
-        resetPagination();
+        refreshTransactions();
+        preferencesManager.saveSelectedDateRange(fromDate, toDate);
+        checkForTransactionsAndLoad();
     }
 
     private void setDateRangeYesterday() {
@@ -804,7 +834,9 @@ public class MainActivity extends AppCompatActivity {
         fromDate = cal.getTimeInMillis();
 
         updateDateButtonTexts();
-        resetPagination();
+        refreshTransactions();
+        preferencesManager.saveSelectedDateRange(fromDate, toDate);
+        checkForTransactionsAndLoad();
     }
 
     private void setDateRangeThisWeek() {
@@ -827,7 +859,9 @@ public class MainActivity extends AppCompatActivity {
         fromDate = cal.getTimeInMillis();
 
         updateDateButtonTexts();
-        resetPagination();
+        refreshTransactions();
+        preferencesManager.saveSelectedDateRange(fromDate, toDate);
+        checkForTransactionsAndLoad();
     }
 
     private void setDateRangeThisMonth() {
@@ -850,7 +884,9 @@ public class MainActivity extends AppCompatActivity {
         fromDate = cal.getTimeInMillis();
 
         updateDateButtonTexts();
-        resetPagination();
+        refreshTransactions();
+        preferencesManager.saveSelectedDateRange(fromDate, toDate);
+        checkForTransactionsAndLoad();
     }
 
     private void setDateRangeLast3Months() {
@@ -874,7 +910,94 @@ public class MainActivity extends AppCompatActivity {
         fromDate = cal.getTimeInMillis();
 
         updateDateButtonTexts();
-        resetPagination();
+
+        // Instead of just calling resetPagination(), call refreshTransactions()
+        // which more thoroughly refreshes the data
+        refreshTransactions();
+
+        // Also save the date range
+        preferencesManager.saveSelectedDateRange(fromDate, toDate);
+        checkForTransactionsAndLoad();
+    }
+
+    private void checkForTransactionsAndLoad() {
+        // Show loading indicator
+        if (loadingIndicator != null) {
+            loadingIndicator.setVisibility(View.VISIBLE);
+        }
+
+        executorService.execute(() -> {
+            try {
+                boolean shouldProcessSMS = false;
+
+                // Get current month boundaries
+                Calendar cal = Calendar.getInstance();
+                cal.set(Calendar.DAY_OF_MONTH, 1); // First day of current month
+                cal.set(Calendar.HOUR_OF_DAY, 0);
+                cal.set(Calendar.MINUTE, 0);
+                cal.set(Calendar.SECOND, 0);
+                cal.set(Calendar.MILLISECOND, 0);
+                long currentMonthStart = cal.getTimeInMillis();
+
+                cal.add(Calendar.MONTH, 1); // First day of next month
+                cal.add(Calendar.MILLISECOND, -1); // Last millisecond of current month
+                long currentMonthEnd = cal.getTimeInMillis();
+
+                // Check if selected date range extends beyond current month
+                if (fromDate < currentMonthStart || toDate > currentMonthEnd) {
+                    Log.d(TAG, "Selected date range extends beyond current month, checking for transactions");
+
+                    // Only need to check the portion outside current month
+                    long checkStartDate = Math.min(fromDate, currentMonthStart);
+                    long checkEndDate = Math.max(toDate, currentMonthEnd);
+
+                    if (fromDate < currentMonthStart) {
+                        checkStartDate = fromDate;
+                        checkEndDate = currentMonthStart - 1; // Up to just before current month
+                    } else if (toDate > currentMonthEnd) {
+                        checkStartDate = currentMonthEnd + 1; // Just after current month
+                        checkEndDate = toDate;
+                    }
+
+                    // Check if we have transactions in the non-current month portion
+                    int count = TransactionDatabase.getInstance(this)
+                            .transactionDao()
+                            .getTransactionCountBetweenDates(checkStartDate, checkEndDate);
+
+                    Log.d(TAG, "Found " + count + " transactions in date range outside current month");
+
+                    // Only process SMS if we don't have transactions outside current month
+                    shouldProcessSMS = (count == 0);
+                } else {
+                    // Date range is within current month, no need to process SMS
+                    Log.d(TAG, "Selected date range is within current month, no need to process SMS");
+                    shouldProcessSMS = false;
+                }
+
+                final boolean finalShouldProcessSMS = shouldProcessSMS;
+                runOnUiThread(() -> {
+                    if (finalShouldProcessSMS) {
+                        // We need to process SMS for non-current month data
+                        Log.d(TAG, "Processing SMS for selected date range");
+                        loadExistingSMS();
+                    } else {
+                        // We already have data or it's current month, just refresh display
+                        Log.d(TAG, "No need to process SMS, refreshing transactions");
+                        refreshTransactions();
+                    }
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "Error checking for transactions", e);
+                runOnUiThread(() -> {
+                    // On error, fallback to just refreshing transactions
+                    refreshTransactions();
+
+                    if (loadingIndicator != null) {
+                        loadingIndicator.setVisibility(View.GONE);
+                    }
+                });
+            }
+        });
     }
 
     private void setupBudgetFab() {
@@ -1357,6 +1480,12 @@ public class MainActivity extends AppCompatActivity {
         if (totalCreditsText != null) {
             totalCreditsText.setText(String.format(Locale.getDefault(), "₹%.2f", totalCredits));
         }
+
+        // Also update balance display
+        if (balanceText != null) {
+            double balance = totalCredits - totalDebits;
+            balanceText.setText(String.format(Locale.getDefault(), "₹%.2f", balance));
+        }
     }
 
     private void updateSummaryWithBudget(List<Transaction> transactions, double budget) {
@@ -1469,7 +1598,9 @@ public class MainActivity extends AppCompatActivity {
 
             updateDateButtonTexts();
             preferencesManager.saveSelectedDateRange(fromDate, toDate);
-            resetPagination();
+
+            // Call refreshTransactions instead of resetPagination
+            refreshTransactions();
 
         }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH));
 
@@ -1520,6 +1651,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadExistingSMS() {
+        // Make sure we have permissions before attempting to load SMS
+        //checkAndRequestSMSPermissions();
+
         Log.d(TAG, "Loading SMS between dates: " + new Date(fromDate) + " to " + new Date(toDate));
 
         preferencesManager.saveSelectedDateRange(fromDate, toDate);
@@ -1529,18 +1663,14 @@ public class MainActivity extends AppCompatActivity {
         }
 
         executorService.execute(() -> {
-            // First, process new SMS messages
+            // Process new SMS messages - refreshTransactions() is called with a delay inside this method
             processSMSMessages();
 
-            // Retrieve transactions
+            // Hide loading indicator if still showing
             runOnUiThread(() -> {
-                // Hide loading indicator
                 if (loadingIndicator != null) {
                     loadingIndicator.setVisibility(View.GONE);
                 }
-
-                // Reset pagination to load fresh data
-                resetPagination();
             });
         });
     }
@@ -1584,6 +1714,14 @@ public class MainActivity extends AppCompatActivity {
                 final int processedCount = count;
                 runOnUiThread(() -> {
                     Toast.makeText(this, "Processed " + processedCount + " messages", Toast.LENGTH_SHORT).show();
+
+                    int delayMs = Math.min(500 + (processedCount * 50), 5000);
+
+                    // Add a slight delay to ensure database operations complete
+                    new Handler().postDelayed(() -> {
+                        // Now force a complete refresh of transactions
+                        refreshTransactions();
+                    }, delayMs); // 1 second delay to ensure transactions are saved
                 });
             }
         } catch (Exception e) {
@@ -1596,6 +1734,58 @@ public class MainActivity extends AppCompatActivity {
                 cursor.close();
             }
         }
+    }
+
+    private void refreshTransactions() {
+        // Reset all pagination state
+        currentPage = 0;
+        hasMoreData = true;
+        allTransactions.clear();
+
+        if (adapter != null) {
+            adapter.clearTransactions();
+        }
+
+        // Show loading indicator
+        if (loadingIndicator != null) {
+            loadingIndicator.setVisibility(View.VISIBLE);
+        }
+
+        // Explicitly load transactions from database
+        executorService.execute(() -> {
+            // Get all transactions for the current date range
+            List<Transaction> transactions = viewModel.getNonExcludedTransactionsBetweenDatesPaginatedSync(
+                    fromDate, toDate, PAGE_SIZE, 0);
+
+            runOnUiThread(() -> {
+                if (loadingIndicator != null) {
+                    loadingIndicator.setVisibility(View.GONE);
+                }
+
+                // Update UI with loaded transactions
+                if (transactions != null && !transactions.isEmpty()) {
+                    // Set transactions to adapter
+                    adapter.setTransactions(transactions);
+
+                    // Update all transactions list for filtering
+                    allTransactions.addAll(transactions);
+
+                    // Update summary
+                    updateSummary(transactions);
+
+                    // Update empty state
+                    if (emptyStateText != null) {
+                        emptyStateText.setVisibility(View.GONE);
+                    }
+
+                    // Increment page for pagination
+                    currentPage = 1;
+                } else if (emptyStateText != null) {
+                    // Show empty state if no transactions
+                    emptyStateText.setVisibility(View.VISIBLE);
+                }
+            });
+        });
     }
 
     private void checkAndRequestSMSPermissions() {
