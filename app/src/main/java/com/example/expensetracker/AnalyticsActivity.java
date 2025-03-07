@@ -268,7 +268,7 @@ public class AnalyticsActivity extends AppCompatActivity {
 
     private void showMonthPicker() {
         MonthYearPickerDialog dialog = new MonthYearPickerDialog();
-        dialog.setListener((view, year, month, dayOfMonth) -> {
+        dialog.setListener((year, month) -> {
             selectedMonth.set(Calendar.YEAR, year);
             selectedMonth.set(Calendar.MONTH, month);
             updateMonthSelectorText();

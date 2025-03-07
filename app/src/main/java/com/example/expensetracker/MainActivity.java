@@ -31,12 +31,10 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.example.expensetracker.adapters.TransactionAdapter;
-import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.database.TransactionDatabase;
 import com.example.expensetracker.dialogs.TransactionEditDialog;
 import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.receivers.EnhancedSMSReceiver;
-import com.example.expensetracker.repository.TransactionRepository;
 import com.example.expensetracker.viewmodel.TransactionViewModel;
 import com.example.expensetracker.utils.PreferencesManager;
 import com.github.mikephil.charting.charts.LineChart;
@@ -634,38 +632,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-
-    private void filterManuallyExcludedTransactions() {
-        // Update filter state - we use a special marker in currentFilterState
-        currentFilterState.category = null; // Not filtering by regular category
-        currentFilterState.filterManuallyExcluded = true; // Set our new flag
-
-        // Apply filter to show only manually excluded transactions
-        List<Transaction> filteredTransactions = new ArrayList<>();
-
-        for (Transaction transaction : allTransactions) {
-            // Show only manually excluded transactions (excluded but not auto-excluded)
-            if (transaction.isExcludedFromTotal() && !transaction.isOtherDebit()) {
-                filteredTransactions.add(transaction);
-            }
-        }
-
-        // Update adapter with filtered list
-        adapter.setTransactions(filteredTransactions);
-
-        // Update filter indicator UI
-        if (filterIndicatorContainer != null) {
-            filterIndicatorContainer.setVisibility(View.VISIBLE);
-            filterIndicator.setText("Filtered by: Manually Excluded Transactions");
-
-            if (resultCount != null) {
-                resultCount.setText(String.format(Locale.getDefault(),
-                        "%d transaction(s) found", filteredTransactions.size()));
-            }
-        }
-
-        // Don't update summary with these transactions - they're excluded from totals
-    }
 
     private void filterTransactionsByCategory(String category) {
         // Update filter state

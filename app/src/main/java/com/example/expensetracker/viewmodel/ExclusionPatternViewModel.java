@@ -93,7 +93,7 @@ public class ExclusionPatternViewModel extends AndroidViewModel {
     /**
      * Get transactions that are excluded by a specific pattern
      */
-    public void getTransactionsExcludedByPattern(ExclusionPattern pattern, TransactionRepository.Callback<List<Transaction>> callback) {
+    public void getTransactionsExcludedByPattern(TransactionRepository.Callback<List<Transaction>> callback) {
         executorService.execute(() -> {
             // Find transactions that match this pattern
 

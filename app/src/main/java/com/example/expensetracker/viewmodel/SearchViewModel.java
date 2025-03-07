@@ -18,7 +18,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class SearchViewModel extends AndroidViewModel {
-    private final TransactionRepository repository;
     private final ExecutorService executorService;
 
     // Only use LiveData for UI updates
@@ -47,7 +46,6 @@ public class SearchViewModel extends AndroidViewModel {
 
     public SearchViewModel(Application application) {
         super(application);
-        repository = new TransactionRepository(application);
         executorService = Executors.newSingleThreadExecutor();
 
         // Initialize with all transactions
@@ -76,10 +74,6 @@ public class SearchViewModel extends AndroidViewModel {
         } else {
             loadAllTransactions(null);
         }
-    }
-
-    public String getSearchText() {
-        return searchText;
     }
 
     // Bank methods
@@ -114,14 +108,6 @@ public class SearchViewModel extends AndroidViewModel {
     public void setAmountRange(Double min, Double max) {
         this.minAmount = min;
         this.maxAmount = max;
-    }
-
-    public Double getMinAmount() {
-        return minAmount;
-    }
-
-    public Double getMaxAmount() {
-        return maxAmount;
     }
 
     // Date range methods
@@ -324,97 +310,6 @@ public class SearchViewModel extends AndroidViewModel {
     // Return a list of available banks
     public List<String> getAvailableBanks() {
         return Arrays.asList("All Banks", "HDFC", "SBI", "ICICI", "AXIS", "OTHER");
-    }
-
-    // Method to search by text in non-UI thread
-    public List<Transaction> searchByTextSync(String query) {
-        try {
-            TransactionDao dao = TransactionDatabase.getInstance(getApplication()).transactionDao();
-
-            // If we have other filters, build a complex query
-            if (hasAnyFilterExceptText()) {
-                TransactionSearchFilter filter = new TransactionSearchFilter.Builder()
-                        .searchText(query)
-                        .bank(bank)
-                        .type(type)
-                        .category(category)
-                        .amountRange(minAmount, maxAmount)
-                        .dateRange(startDate, endDate)
-                        .excludedFromTotal(excludedFromTotal)
-                        .isRecurring(isRecurring)
-                        .merchantName(merchantName)
-                        .build();
-
-                SupportSQLiteQuery sqliteQuery = filter.buildSearchQuery();
-                return dao.searchTransactionsWithFilterSync(sqliteQuery);
-            } else {
-                // Otherwise just do a simple text search
-                List<Transaction> transactions = dao.getAllTransactionsSync();
-
-                List<Transaction> filteredList = new ArrayList<>();
-                String lowerQuery = query.toLowerCase();
-
-                for (Transaction transaction : transactions) {
-                    if ((transaction.getDescription() != null &&
-                            transaction.getDescription().toLowerCase().contains(lowerQuery)) ||
-                            (transaction.getMerchantName() != null &&
-                                    transaction.getMerchantName().toLowerCase().contains(lowerQuery)) ||
-                            (transaction.getCategory() != null &&
-                                    transaction.getCategory().toLowerCase().contains(lowerQuery)) ||
-                            (transaction.getBank() != null &&
-                                    transaction.getBank().toLowerCase().contains(lowerQuery)) ||
-                            (transaction.getOriginalSms() != null &&
-                                    transaction.getOriginalSms().toLowerCase().contains(lowerQuery))) {
-
-                        filteredList.add(transaction);
-                    }
-                }
-
-                return filteredList;
-            }
-        } catch (Exception e) {
-            // Log error and return empty list
-            return new ArrayList<>();
-        }
-    }
-
-    // Export filtered transactions (background operation)
-    public void exportFilteredTransactions(ExportCallback callback) {
-        // Set loading state
-        isLoading.setValue(true);
-
-        executorService.execute(() -> {
-            try {
-                // Get current filtered results
-                List<Transaction> transactions;
-
-                if (hasAnyFilter()) {
-                    // Use current filters
-                    TransactionSearchFilter filter = buildCurrentFilter();
-                    SupportSQLiteQuery query = filter.buildSearchQuery();
-
-                    transactions = TransactionDatabase.getInstance(getApplication())
-                            .transactionDao()
-                            .searchTransactionsWithFilterSync(query);
-                } else {
-                    // Get all transactions
-                    transactions = TransactionDatabase.getInstance(getApplication())
-                            .transactionDao()
-                            .getAllTransactionsSync();
-                }
-
-                // Call export callback with the transactions
-                isLoading.postValue(false);
-                if (callback != null) {
-                    callback.onTransactionsReady(transactions);
-                }
-            } catch (Exception e) {
-                isLoading.postValue(false);
-                if (callback != null) {
-                    callback.onError("Export error: " + e.getMessage());
-                }
-            }
-        });
     }
 
     // Callback for export operation

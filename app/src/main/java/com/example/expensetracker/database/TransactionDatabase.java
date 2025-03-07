@@ -1,12 +1,6 @@
 package com.example.expensetracker.database;
 
-import android.content.Context;
-import androidx.room.Database;
-import androidx.room.Room;
-import androidx.room.RoomDatabase;
-
 import com.example.expensetracker.models.ExclusionPattern;
-import com.example.expensetracker.models.Transaction;
 
 import android.content.Context;
 import androidx.room.Database;

@@ -80,16 +80,12 @@ public class Transaction {
     public void setId(long id) { this.id = id; }
 
     public String getBank() { return bank; }
-    public void setBank(String bank) { this.bank = bank; }
 
     public String getType() { return type; }
-    public void setType(String type) { this.type = type; }
 
     public double getAmount() { return amount; }
-    public void setAmount(double amount) { this.amount = amount; }
 
     public long getDate() { return date; }
-    public void setDate(long date) { this.date = date; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
@@ -136,16 +132,6 @@ public class Transaction {
 
     public String getExclusionSource() { return exclusionSource; }
     public void setExclusionSource(String exclusionSource) { this.exclusionSource = exclusionSource; }
-
-    // For displaying formatted amount
-    public String getFormattedAmount() {
-        return String.format("₹%.2f", amount);
-    }
-
-    // For prediction and analysis
-    public boolean shouldIncludeInAnalysis() {
-        return !isExcludedFromTotal;
-    }
 
     // For category management
     public static class Categories {

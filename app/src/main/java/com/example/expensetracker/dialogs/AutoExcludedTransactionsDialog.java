@@ -1,7 +1,6 @@
 package com.example.expensetracker.dialogs;
 
 import android.app.Dialog;
-import android.content.DialogInterface;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -9,7 +8,6 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.DialogFragment;
-import androidx.appcompat.app.AlertDialog;
 
 import com.example.expensetracker.R;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;

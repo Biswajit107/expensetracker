@@ -66,10 +66,6 @@ public class SMSReceiver extends BroadcastReceiver {
         }
     }
 
-    public void parseAndSaveTransaction(Context context, String message, long messageDate) {
-        parseAndSaveTransaction(context, message, null, messageDate);
-    }
-
 
     // Updated parseAndSaveTransaction method to use the sender information
     public void parseAndSaveTransaction(Context context, String message, String sender, long messageDate) {
@@ -274,38 +270,6 @@ public class SMSReceiver extends BroadcastReceiver {
                 return Double.parseDouble(amountStr);
             } catch (NumberFormatException e) {
                 Log.e("SMSReceiver", "Error parsing amount: " + matcher.group(1));
-            }
-        }
-        return null;
-    }
-
-    private Long extractDate(String message) {
-        // Try different date patterns
-        String[] datePatterns = {
-                "(\\d{2}/\\d{2}/\\d{2})",      // dd/MM/yy
-                "(\\d{2}-\\d{2}-\\d{2})",      // dd-MM-yy
-                "(\\d{2}/\\d{2}/\\d{4})",      // dd/MM/yyyy
-                "(\\d{2}-\\d{2}-\\d{4})"       // dd-MM-yyyy
-        };
-
-        for (String patternStr : datePatterns) {
-            Pattern pattern = Pattern.compile(patternStr);
-            Matcher matcher = pattern.matcher(message);
-            if (matcher.find()) {
-                try {
-                    String dateStr = matcher.group(1);
-                    // Convert to consistent format
-                    dateStr = dateStr.replace("-", "/");
-                    SimpleDateFormat format;
-                    if (dateStr.length() == 8) { // dd/MM/yy
-                        format = new SimpleDateFormat("dd/MM/yy", Locale.getDefault());
-                    } else {
-                        format = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
-                    }
-                    return format.parse(dateStr).getTime();
-                } catch (ParseException e) {
-                    Log.e("SMSReceiver", "Error parsing date: " + matcher.group(1));
-                }
             }
         }
         return null;

@@ -15,10 +15,6 @@ public class PreferencesManager {
         prefs.edit().putLong(KEY_LAST_SYNC, timestamp).apply();
     }
 
-    public long getLastSyncTime() {
-        return prefs.getLong(KEY_LAST_SYNC, 0);
-    }
-
     private static final String KEY_FROM_DATE = "from_date";
     private static final String KEY_TO_DATE = "to_date";
 

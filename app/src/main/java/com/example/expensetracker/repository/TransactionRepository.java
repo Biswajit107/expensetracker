@@ -151,19 +151,6 @@ public class TransactionRepository {
         });
     }
 
-    /**
-     * Include all auto-excluded transactions
-     * @param callback Callback with count of updated transactions
-     */
-    public void includeAllAutoExcludedTransactions(final Callback<Integer> callback) {
-        executorService.execute(() -> {
-            int count = transactionDao.includeAllAutoExcludedTransactions();
-            new Handler(Looper.getMainLooper()).post(() -> {
-                callback.onResult(count);
-            });
-        });
-    }
-
     // Add to TransactionRepository.java
     public void getUniqueBanksList(Callback<List<String>> callback) {
         executorService.execute(() -> {

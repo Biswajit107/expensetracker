@@ -308,7 +308,7 @@ public class PredictionViewModel extends AndroidViewModel {
         }
 
         public double getPredictedAmount() { return predictedAmount; }
-        public double getStandardDeviation() { return standardDeviation; }
+
         public List<Double> getHistoricalData() { return historicalData; }
         public double getLowerBound() { return predictedAmount - standardDeviation; }
         public double getUpperBound() { return predictedAmount + standardDeviation; }

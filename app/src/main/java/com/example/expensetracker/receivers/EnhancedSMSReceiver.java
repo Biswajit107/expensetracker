@@ -191,13 +191,6 @@ public class EnhancedSMSReceiver extends BroadcastReceiver {
     }
 
     /**
-     * Parse and save a transaction from an SMS message (overloaded method)
-     */
-    public void parseAndSaveTransaction(Context context, String message, long messageDate) {
-        parseAndSaveTransaction(context, message, null, messageDate);
-    }
-
-    /**
      * Save a transaction to the database
      */
     private void saveTransaction(Context context, Transaction transaction) {
@@ -210,26 +203,4 @@ public class EnhancedSMSReceiver extends BroadcastReceiver {
         }
     }
 
-    /**
-     * For bulk processing of messages
-     */
-    public void processBulkMessages(Context context, List<SmsMessage> messages) {
-        for (SmsMessage message : messages) {
-            parseAndSaveTransaction(
-                    context,
-                    message.getMessageBody(),
-                    message.getDisplayOriginatingAddress(),
-                    message.getTimestampMillis()
-            );
-        }
-    }
-
-    /**
-     * Clean up resources when the receiver is no longer needed
-     */
-    public void cleanup() {
-        if (executorService != null && !executorService.isShutdown()) {
-            executorService.shutdown();
-        }
-    }
 }

@@ -24,7 +24,6 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.expensetracker.R;
 import com.example.expensetracker.adapters.TransactionAdapter;
-import com.example.expensetracker.database.TransactionSearchFilter;
 import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.viewmodel.SearchViewModel;
 import com.google.android.material.button.MaterialButton;
@@ -32,10 +31,8 @@ import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.slider.RangeSlider;
 import com.google.android.material.switchmaterial.SwitchMaterial;
-import com.google.android.material.textfield.TextInputLayout;
 
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;

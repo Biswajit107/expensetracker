@@ -77,10 +77,6 @@ public class GroupedExpensesViewModel extends AndroidViewModel implements Groupe
         dataRefreshTrigger.setValue(!dataRefreshTrigger.getValue());
     }
 
-    public boolean isGroupExpanded(int position) {
-        return expandedGroups.contains(position);
-    }
-
     private void loadTransactions() {
         executorService.execute(() -> {
             // Get date range based on timeframe

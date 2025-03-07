@@ -5,8 +5,6 @@ import com.example.expensetracker.models.ExclusionPattern;
 import com.example.expensetracker.models.Transaction;
 
 import java.util.List;
-import java.util.regex.Pattern;
-import java.util.regex.Matcher;
 
 /**
  * Utility class for creating and matching transaction exclusion patterns

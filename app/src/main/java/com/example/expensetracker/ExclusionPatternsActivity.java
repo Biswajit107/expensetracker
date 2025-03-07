@@ -9,7 +9,6 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -17,8 +16,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.expensetracker.adapters.ExclusionPatternAdapter;
 import com.example.expensetracker.adapters.TransactionAdapter;
 import com.example.expensetracker.models.ExclusionPattern;
-import com.example.expensetracker.models.Transaction;
-import com.example.expensetracker.repository.TransactionRepository;
 import com.example.expensetracker.viewmodel.ExclusionPatternViewModel;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
@@ -173,7 +170,7 @@ public class ExclusionPatternsActivity extends AppCompatActivity
         affectedTransactionsRecyclerView.setAdapter(transactionAdapter);
 
         // Load affected transactions
-        viewModel.getTransactionsExcludedByPattern(pattern, transactions -> {
+        viewModel.getTransactionsExcludedByPattern(transactions -> {
             runOnUiThread(() -> {
                 if (transactions != null && !transactions.isEmpty()) {
                     transactionAdapter.setTransactions(transactions);

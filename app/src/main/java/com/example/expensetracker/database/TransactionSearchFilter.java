@@ -1,10 +1,8 @@
 package com.example.expensetracker.database;
 
-import androidx.lifecycle.LiveData;
 import androidx.sqlite.db.SimpleSQLiteQuery;
 import androidx.sqlite.db.SupportSQLiteQuery;
 
-import com.example.expensetracker.models.Transaction;
 import java.util.ArrayList;
 import java.util.List;
 

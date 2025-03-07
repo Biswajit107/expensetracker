@@ -7,7 +7,6 @@ import android.view.View;
 import android.widget.NumberPicker;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.DialogFragment;
 
 import com.example.expensetracker.R;
@@ -59,10 +58,8 @@ public class MonthYearPickerDialog extends DialogFragment {
                 .setPositiveButton("OK", (dialog, which) -> {
                     if (listener != null) {
                         listener.onDateSet(
-                                null,
                                 yearPicker.getValue(),
-                                monthPicker.getValue(),
-                                1
+                                monthPicker.getValue()
                         );
                     }
                 })
@@ -71,6 +68,6 @@ public class MonthYearPickerDialog extends DialogFragment {
     }
 
     public interface DatePickerListener {
-        void onDateSet(View view, int year, int month, int dayOfMonth);
+        void onDateSet(int year, int month);
     }
 }

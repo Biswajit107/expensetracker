@@ -233,11 +233,6 @@ public class TransactionSearchSortUtil {
                 return this;
             }
 
-            public Builder category(String category) {
-                this.category = category;
-                return this;
-            }
-
             public Builder searchText(String searchText) {
                 this.searchText = searchText;
                 return this;

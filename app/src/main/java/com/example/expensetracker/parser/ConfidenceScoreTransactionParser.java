@@ -1,22 +1,11 @@
 package com.example.expensetracker.parser;
 
 import android.util.Log;
-import android.util.Base64;
 
-import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.models.Transaction;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -294,7 +283,6 @@ public class ConfidenceScoreTransactionParser extends EnhancedTransactionParser 
         Long extractedDate = extractDate(message, 0);
         if (extractedDate != null) {
             score.addScore("Transaction date", SCORE_TRANSACTION_DATE);
-            score.detectedDate = extractedDate;
         }
 
         // Check for merchant - good transaction indicator
@@ -337,7 +325,6 @@ public class ConfidenceScoreTransactionParser extends EnhancedTransactionParser 
         Map<String, Double> scoreComponents = new HashMap<>();
         String transactionType = null;
         Double detectedAmount = null;
-        Long detectedDate = null;
         String detectedMerchant = null;
         String detectedBank = null;
         String referenceNumber = null;

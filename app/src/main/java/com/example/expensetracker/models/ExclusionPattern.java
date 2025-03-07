@@ -3,7 +3,6 @@ package com.example.expensetracker.models;
 import androidx.room.Entity;
 import androidx.room.PrimaryKey;
 import androidx.room.ColumnInfo;
-import java.util.Date;
 
 @Entity(tableName = "exclusion_patterns")
 public class ExclusionPattern {
@@ -83,11 +82,9 @@ public class ExclusionPattern {
     public void setCreatedDate(long createdDate) { this.createdDate = createdDate; }
 
     public long getSourceTransactionId() { return sourceTransactionId; }
-    public void setSourceTransactionId(long sourceTransactionId) { this.sourceTransactionId = sourceTransactionId; }
 
     public int getPatternMatchesCount() { return patternMatchesCount; }
     public void setPatternMatchesCount(int patternMatchesCount) { this.patternMatchesCount = patternMatchesCount; }
-    public void incrementMatchesCount() { this.patternMatchesCount++; }
 
     public boolean isActive() { return isActive; }
     public void setActive(boolean active) { isActive = active; }

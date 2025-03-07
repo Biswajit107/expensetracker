@@ -12,7 +12,6 @@ import androidx.transition.AutoTransition;
 import androidx.transition.TransitionManager;
 
 import com.example.expensetracker.R;
-import com.example.expensetracker.viewmodel.GroupedExpensesViewModel;
 import com.example.expensetracker.viewmodel.GroupedExpensesViewModel.ExpenseGroup;
 
 import java.util.ArrayList;
@@ -52,7 +51,7 @@ public class GroupedExpensesAdapter extends RecyclerView.Adapter<GroupedExpenses
             isExpanded = expandedStates.get(position);
         }
 
-        holder.bind(group, position, isExpanded);
+        holder.bind(group, isExpanded);
     }
 
     @Override
@@ -121,7 +120,7 @@ public class GroupedExpensesAdapter extends RecyclerView.Adapter<GroupedExpenses
             });
         }
 
-        void bind(ExpenseGroup group, int position, boolean isExpanded) {
+        void bind(ExpenseGroup group, boolean isExpanded) {
             groupNameText.setText(group.getName());
             transactionCountText.setText(String.format(Locale.getDefault(),
                     "%d transactions", group.getTransactionCount()));

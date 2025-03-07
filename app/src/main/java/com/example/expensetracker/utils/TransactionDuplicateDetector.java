@@ -12,7 +12,6 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Calendar;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -27,25 +26,9 @@ import java.util.regex.Pattern;
 public class TransactionDuplicateDetector {
     private static final String TAG = "DuplicateDetector";
 
-    // Constants for time windows
-    private static final long SAME_DAY_WINDOW_MS = TimeUnit.HOURS.toMillis(24);
-    private static final long CLOSE_TIME_WINDOW_MS = TimeUnit.HOURS.toMillis(4);
-
     // Patterns for OTP messages
     private static final Pattern OTP_PATTERN = Pattern.compile(
             "(?i)(OTP|one.?time.?password|verification.?code|secure.?code|security.?code)");
-
-    /**
-     * Check if a message is an OTP message that shouldn't be recorded as a transaction
-     * @param message The SMS message content
-     * @return true if this is an OTP message
-     */
-    public static boolean isOtpMessage(String message) {
-        if (message == null) return false;
-
-        Matcher matcher = OTP_PATTERN.matcher(message);
-        return matcher.find();
-    }
 
     /**
      * Generate a unique fingerprint for a transaction
@@ -314,71 +297,4 @@ public class TransactionDuplicateDetector {
         return results;
     }
 
-    /**
-     * Get all transactions marked as duplicates
-     * @param dao The TransactionDao to use for queries
-     * @return List of transactions marked as duplicates
-     */
-    public static List<Transaction> getAllMarkedDuplicates(TransactionDao dao) {
-        if (dao == null) {
-            return new ArrayList<>();
-        }
-
-        // Search for transactions with [DUPLICATE] in description
-        return dao.searchTransactions("[DUPLICATE]");
-    }
-
-    /**
-     * Find all duplicate sets in the database for review.
-     * Groups transactions that are likely duplicates of each other.
-     * @param dao The TransactionDao to use for queries
-     * @return A list of transaction groups, where each group contains potential duplicates
-     */
-    public static List<List<Transaction>> findAllDuplicateSets(TransactionDao dao) {
-        List<List<Transaction>> duplicateSets = new ArrayList<>();
-
-        if (dao == null) {
-            return duplicateSets;
-        }
-
-        // Get all transactions
-        List<Transaction> allTransactions = dao.getAllTransactionsSync();
-
-        // Track which transactions have been assigned to a set
-        Set<Long> processedIds = new HashSet<>();
-
-        // For each transaction
-        for (Transaction transaction : allTransactions) {
-            // Skip if already in a duplicate set
-            if (processedIds.contains(transaction.getId())) {
-                continue;
-            }
-
-            // Find potential duplicates
-            List<Pair<Transaction, Integer>> potentialDuplicates =
-                    findPotentialDuplicates(transaction, dao);
-
-            // If we have potential duplicates, create a duplicate set
-            if (!potentialDuplicates.isEmpty()) {
-                List<Transaction> duplicateSet = new ArrayList<>();
-                duplicateSet.add(transaction);
-                processedIds.add(transaction.getId());
-
-                for (Pair<Transaction, Integer> pair : potentialDuplicates) {
-                    // Only include high confidence duplicates
-                    if (pair.second >= 80) {
-                        duplicateSet.add(pair.first);
-                        processedIds.add(pair.first.getId());
-                    }
-                }
-
-                // Only add sets with multiple transactions
-                if (duplicateSet.size() > 1) {
-                    duplicateSets.add(duplicateSet);
-                }
-            }
-        }
-
-        return duplicateSets;
-    }
 }

@@ -58,7 +58,6 @@ public class EnhancedTransactionParser {
 
     // ===== Context tokens for parsing =====
     private enum TokenType {
-        AMOUNT, DATE, BANK, MERCHANT, PURPOSE, TRANSACTION_TYPE, REFERENCE, UNKNOWN
     }
 
     /**
@@ -463,44 +462,6 @@ public class EnhancedTransactionParser {
         axisFormats.add(Pattern.compile("(?i)(?:INR|Rs\\.?)\\s*(\\d+(?:,\\d+)*(?:\\.\\d{1,2})?)\\s*(?:debited|credited)\\s*from.*Axis"));
         axisFormats.add(Pattern.compile("(?i)Axis\\s+Bank(?:: |\\s+)(?:INR|Rs\\.?)\\s*(\\d+(?:,\\d+)*(?:\\.\\d{1,2})?)\\s*(?:spent|received)"));
         BANK_MESSAGE_FORMATS.put("AXIS", axisFormats);
-    }
-
-    /**
-     * Quick check for obvious promotional content
-     * Used as a final safety check for ambiguous messages
-     * @param message The lowercase message content
-     * @return true if the message looks promotional
-     */
-    private boolean looksLikePromotion(String message) {
-        // Check for obvious promotional terms
-        String[] obviousPromoTerms = {
-                "offer", "discount", "sale", "promotion", "deal", "limited time",
-                "special", "exclusive", "save", "buy", "free", "new launch",
-                "introducing", "upgrade to", "apply now", "click here", "call now"
-        };
-
-        int count = 0;
-        for (String term : obviousPromoTerms) {
-            if (message.contains(term)) {
-                count++;
-                if (count >= 2) {
-                    return true;  // If 2 or more promo terms are found
-                }
-            }
-        }
-
-        // Check for phrases that almost never appear in transaction messages
-        if (message.contains("terms and conditions") ||
-                message.contains("t&c apply") ||
-                message.contains("visit our website") ||
-                message.contains("visit store") ||
-                message.contains("download our app") ||
-                message.contains("best offer") ||
-                message.contains("best price")) {
-            return true;
-        }
-
-        return false;
     }
 
     /**
@@ -1513,23 +1474,6 @@ public class EnhancedTransactionParser {
             Log.e(TAG, "Error generating hash", e);
             return content;
         }
-    }
-
-    /**
-     * Checks if a transaction with the same hash already exists
-     */
-    public boolean isDuplicate(Transaction transaction, TransactionDao dao) {
-        if (transaction == null || dao == null) {
-            return false;
-        }
-
-        // Check if this transaction's hash already exists in the database
-        String hash = transaction.getMessageHash();
-        if (hash == null || hash.isEmpty()) {
-            return false;
-        }
-
-        return dao.hasTransaction(hash);
     }
 
     /**
