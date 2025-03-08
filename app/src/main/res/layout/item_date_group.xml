@@ -15,10 +15,11 @@
 
         <!-- Date Group Header -->
         <LinearLayout
+            android:id="@+id/dateGroupHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="12dp"
-            android:background="@color/background_light"
+            android:background="?attr/selectableItemBackground"
             android:orientation="horizontal">
 
             <LinearLayout
@@ -48,7 +49,17 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:textSize="18sp"
-                android:textStyle="bold"/>
+                android:textStyle="bold"
+                android:layout_gravity="center_vertical"/>
+
+            <!-- Expansion Indicator -->
+            <ImageView
+                android:id="@+id/expansionIndicator"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center_vertical"
+                android:layout_marginStart="8dp"
+                android:src="@drawable/ic_expand_more"/>
         </LinearLayout>
 
         <!-- Transaction list for this date -->
@@ -56,6 +67,9 @@
             android:id="@+id/nestedTransactionList"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:nestedScrollingEnabled="false"/>
+            android:nestedScrollingEnabled="false"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:visibility="gone"/>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

@@ -160,4 +160,16 @@ public interface TransactionDao {
     @Query("SELECT COUNT(*) FROM transactions WHERE date BETWEEN :startDate AND :endDate")
     int getTransactionCountBetweenDates(long startDate, long endDate);
 
+    /**
+     * Get all manually excluded transactions between dates (no pagination)
+     */
+    @Query("SELECT * FROM transactions WHERE date BETWEEN :startDate AND :endDate AND is_excluded_from_total = 1 AND is_other_debit = 0 ORDER BY date DESC")
+    List<Transaction> getManuallyExcludedTransactionsBetweenDatesSync(long startDate, long endDate);
+
+    /**
+     * Get all non-excluded transactions between dates (no pagination)
+     */
+    @Query("SELECT * FROM transactions WHERE date BETWEEN :startDate AND :endDate AND is_excluded_from_total = 0 ORDER BY date DESC")
+    List<Transaction> getNonExcludedTransactionsBetweenDatesSync(long startDate, long endDate);
+
 }

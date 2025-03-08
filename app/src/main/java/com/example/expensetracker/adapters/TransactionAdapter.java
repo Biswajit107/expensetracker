@@ -247,4 +247,12 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
         this.transactions.clear();
         notifyItemRangeRemoved(0, size);
     }
+
+    /**
+     * Get the current transaction click listener
+     * @return The OnTransactionClickListener
+     */
+    public OnTransactionClickListener getOnTransactionClickListener() {
+        return this.listener;
+    }
 }

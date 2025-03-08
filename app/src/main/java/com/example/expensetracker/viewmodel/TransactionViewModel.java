@@ -9,6 +9,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -108,5 +109,159 @@ public class TransactionViewModel extends AndroidViewModel {
      */
     public List<Transaction> getManuallyExcludedTransactionsPaginatedSync(long startDate, long endDate, int limit, int offset) {
         return repository.getManuallyExcludedTransactionsPaginatedSync(startDate, endDate, limit, offset);
+    }
+
+    /**
+     * Class to track transaction filter state
+     */
+    public static class FilterState {
+        public String bank = "All Banks";
+        public String type = "All Types";
+        public String category = null;
+        public String searchQuery = "";
+        public double minAmount = 0;
+        public double maxAmount = 100000;
+        public boolean showingExcluded = false;
+        public int sortOption = 0; // 0 = Date (newest first)
+        public boolean filterManuallyExcluded = false;
+        public boolean viewingManuallyExcluded = false;
+
+        // Update the isAnyFilterActive method
+        public boolean isAnyFilterActive() {
+            return !bank.equals("All Banks") ||
+                    !type.equals("All Types") ||
+                    category != null ||
+                    !searchQuery.isEmpty() ||
+                    minAmount > 0 ||
+                    maxAmount < 100000 ||
+                    filterManuallyExcluded; // Include our new property here
+        }
+
+        // Apply the filters method to handle the new property
+        public List<Transaction> applyFilters(List<Transaction> transactions) {
+            if (transactions == null) return new ArrayList<>();
+
+            List<Transaction> result = new ArrayList<>();
+
+            for (Transaction transaction : transactions) {
+                boolean shouldInclude = true;
+
+                // Special case: If filtering manually excluded transactions
+                if (filterManuallyExcluded) {
+                    // Only include manually excluded transactions
+                    shouldInclude = transaction.isExcludedFromTotal() && !transaction.isOtherDebit();
+
+                    // No need to check other filters if this doesn't match
+                    if (!shouldInclude) {
+                        continue;
+                    }
+                }
+
+                // Apply bank filter
+                if (!bank.equals("All Banks") && !bank.equals(transaction.getBank())) {
+                    shouldInclude = false;
+                }
+
+                // Apply type filter
+                if (shouldInclude && !type.equals("All Types") && !type.equals(transaction.getType())) {
+                    shouldInclude = false;
+                }
+
+                // Apply category filter (only if not filtering for manually excluded)
+                if (shouldInclude && !filterManuallyExcluded && category != null && !category.isEmpty() &&
+                        !category.equals(transaction.getCategory())) {
+                    shouldInclude = false;
+                }
+
+                // Apply amount filter
+                if (shouldInclude && (transaction.getAmount() < minAmount ||
+                        transaction.getAmount() > maxAmount)) {
+                    shouldInclude = false;
+                }
+
+                // Apply exclusion filter (but skip this check if we're explicitly filtering for manually excluded)
+                if (shouldInclude && !filterManuallyExcluded && transaction.isExcludedFromTotal() && transaction.isOtherDebit() && !showingExcluded) {
+                    shouldInclude = false;
+                }
+
+                // Apply search query
+                if (shouldInclude && !searchQuery.isEmpty()) {
+                    boolean matchesSearch = false;
+                    String lowerQuery = searchQuery.toLowerCase();
+
+                    // Check description
+                    if (transaction.getDescription() != null &&
+                            transaction.getDescription().toLowerCase().contains(lowerQuery)) {
+                        matchesSearch = true;
+                    }
+
+                    // Check bank
+                    if (!matchesSearch && transaction.getBank() != null &&
+                            transaction.getBank().toLowerCase().contains(lowerQuery)) {
+                        matchesSearch = true;
+                    }
+
+                    // Check category
+                    if (!matchesSearch && transaction.getCategory() != null &&
+                            transaction.getCategory().toLowerCase().contains(lowerQuery)) {
+                        matchesSearch = true;
+                    }
+
+                    // Check merchant name
+                    if (!matchesSearch && transaction.getMerchantName() != null &&
+                            transaction.getMerchantName().toLowerCase().contains(lowerQuery)) {
+                        matchesSearch = true;
+                    }
+
+                    // Check amount
+                    if (!matchesSearch && String.valueOf(transaction.getAmount()).contains(lowerQuery)) {
+                        matchesSearch = true;
+                    }
+
+                    shouldInclude = matchesSearch;
+                }
+
+                if (shouldInclude) {
+                    result.add(transaction);
+                }
+            }
+
+            // Apply current sort option
+            sortTransactions(result, sortOption);
+
+            return result;
+        }
+
+        // Helper method to sort transactions
+        private static void sortTransactions(List<Transaction> transactions, int sortOption) {
+            switch (sortOption) {
+                case 0: // Date (newest first)
+                    Collections.sort(transactions, (a, b) -> Long.compare(b.getDate(), a.getDate()));
+                    break;
+                case 1: // Date (oldest first)
+                    Collections.sort(transactions, (a, b) -> Long.compare(a.getDate(), b.getDate()));
+                    break;
+                case 2: // Amount (highest first)
+                    Collections.sort(transactions, (a, b) -> Double.compare(b.getAmount(), a.getAmount()));
+                    break;
+                case 3: // Amount (lowest first)
+                    Collections.sort(transactions, (a, b) -> Double.compare(a.getAmount(), b.getAmount()));
+                    break;
+                case 4: // Description (A-Z)
+                    Collections.sort(transactions, (a, b) -> {
+                        String descA = a.getDescription() != null ? a.getDescription() : "";
+                        String descB = b.getDescription() != null ? b.getDescription() : "";
+                        return descA.compareToIgnoreCase(descB);
+                    });
+                    break;
+                case 5: // Description (Z-A)
+                    Collections.sort(transactions, (a, b) -> {
+                        String descA = a.getDescription() != null ? a.getDescription() : "";
+                        String descB = b.getDescription() != null ? b.getDescription() : "";
+                        return descB.compareToIgnoreCase(descA);
+                    });
+                    break;
+            }
+        }
     }
 }

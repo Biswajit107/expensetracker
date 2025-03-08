@@ -381,6 +381,17 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/viewModeButton"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton.Icon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    app:icon="@drawable/ic_view_list"
+                    app:iconTint="@color/primary"
+                    android:textColor="@color/primary"
+                    android:text="List View"/>
+
                 <!-- Filter Button -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/filterButton"

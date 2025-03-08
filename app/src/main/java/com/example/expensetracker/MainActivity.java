@@ -35,6 +35,7 @@ import com.example.expensetracker.database.TransactionDatabase;
 import com.example.expensetracker.dialogs.TransactionEditDialog;
 import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.receivers.EnhancedSMSReceiver;
+import com.example.expensetracker.utils.SmartLoadingStrategy;
 import com.example.expensetracker.viewmodel.TransactionViewModel;
 import com.example.expensetracker.utils.PreferencesManager;
 import com.github.mikephil.charting.charts.LineChart;
@@ -100,6 +101,14 @@ public class MainActivity extends AppCompatActivity {
     private boolean isLoading = false;
     private boolean hasMoreData = true;
     private FilterState currentFilterState = new FilterState();
+    private SmartLoadingStrategy smartLoadingStrategy;
+    private MaterialButton viewModeButton;
+    private ViewMode currentViewMode = ViewMode.LIST; // Default to list mode
+
+    private enum ViewMode {
+        LIST, // Individual transactions with pagination
+        GROUP // Grouped by date
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -130,6 +139,12 @@ public class MainActivity extends AppCompatActivity {
         checkAndRequestSMSPermissions();
         setupBottomNavigation();
 
+        initializeSmartLoadingStrategy();
+
+        boolean preferGroupedView = preferencesManager.getViewModePreference();
+        currentViewMode = preferGroupedView ? ViewMode.GROUP : ViewMode.LIST;
+        updateViewModeButtonAppearance();
+
         // Automatically load transactions when the app starts
         //resetPagination();
 
@@ -140,6 +155,42 @@ public class MainActivity extends AppCompatActivity {
 //                loadExistingSMS();
 //            }
 //        });
+    }
+
+    private void initializeSmartLoadingStrategy() {
+        // Get reference to RecyclerView
+        RecyclerView recyclerView = findViewById(R.id.recyclerView);
+        if (recyclerView == null) {
+            Log.e(TAG, "RecyclerView not found when initializing SmartLoadingStrategy");
+            return;
+        }
+
+        // Initialize the smart loading strategy
+        smartLoadingStrategy = new SmartLoadingStrategy(
+                this,
+                executorService,
+                recyclerView,
+                adapter,
+                emptyStateText,
+                loadingIndicator,
+                currentFilterState
+        );
+
+        // Set click listener for transaction editing
+        smartLoadingStrategy.setOnTransactionClickListener(transaction -> {
+            showEditTransactionDialog(transaction);
+        });
+
+        // Load user's view mode preference
+        PreferencesManager preferencesManager = new PreferencesManager(this);
+        boolean preferGroupedView = preferencesManager.getViewModePreference();
+        currentViewMode = preferGroupedView ? ViewMode.GROUP : ViewMode.LIST;
+
+        // Apply user's preferred view mode
+        smartLoadingStrategy.setForceViewMode(preferGroupedView);
+
+        // Log the initial view mode
+        Log.d(TAG, "Starting with " + (preferGroupedView ? "grouped" : "list") + " view based on user preference");
     }
 
     private void initializeViews() {
@@ -163,6 +214,8 @@ public class MainActivity extends AppCompatActivity {
         clearFilterButton = findViewById(R.id.clearFilterButton);
         resultCount = findViewById(R.id.resultCount);
 
+        setupViewModeToggle();
+
         // Set up filter button click listener
         if (filterButton != null) {
             filterButton.setOnClickListener(v -> showAdvancedFilterDialog());
@@ -183,6 +236,50 @@ public class MainActivity extends AppCompatActivity {
                 filterIndicatorContainer.setVisibility(View.GONE);
             });
         }
+    }
+
+    private void setupViewModeToggle() {
+        viewModeButton = findViewById(R.id.viewModeButton);
+        if (viewModeButton == null) return;
+
+        // Set initial icon and text
+        updateViewModeButtonAppearance();
+
+        // Set click listener
+        viewModeButton.setOnClickListener(v -> {
+            toggleViewMode();
+        });
+    }
+
+    private void toggleViewMode() {
+        // Toggle mode
+        currentViewMode = (currentViewMode == ViewMode.LIST) ? ViewMode.GROUP : ViewMode.LIST;
+
+        // Update button appearance
+        updateViewModeButtonAppearance();
+
+        // Force smart loading strategy to use the selected view mode
+        if (smartLoadingStrategy != null) {
+            smartLoadingStrategy.setForceViewMode(currentViewMode == ViewMode.GROUP);
+
+            // Reload data with new view mode
+            refreshTransactions();
+        }
+    }
+
+    private void updateViewModeButtonAppearance() {
+        if (viewModeButton == null) return;
+
+        if (currentViewMode == ViewMode.LIST) {
+            viewModeButton.setIcon(getDrawable(R.drawable.ic_view_list));
+            viewModeButton.setText("List View");
+        } else {
+            viewModeButton.setIcon(getDrawable(R.drawable.ic_view_module));
+            viewModeButton.setText("Group View");
+        }
+
+        PreferencesManager preferencesManager = new PreferencesManager(this);
+        preferencesManager.saveViewMode(currentViewMode == ViewMode.GROUP);
     }
 
     private void setupRecyclerView() {
@@ -273,6 +370,11 @@ public class MainActivity extends AppCompatActivity {
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
                 super.onScrolled(recyclerView, dx, dy);
 
+                // Skip pagination if we're using grouped view
+                if (smartLoadingStrategy != null && smartLoadingStrategy.isGroupedViewActive()) {
+                    return;
+                }
+
                 LinearLayoutManager layoutManager = (LinearLayoutManager) recyclerView.getLayoutManager();
                 if (layoutManager == null) return;
 
@@ -293,6 +395,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void loadMoreTransactions() {
+        // Skip if we're using grouped view
+        if (smartLoadingStrategy != null && smartLoadingStrategy.isGroupedViewActive()) {
+            return;
+        }
+
+        // Proceed with normal pagination if not in grouped view
         isLoading = true;
 
         if (loadingIndicator != null) {
@@ -1424,7 +1532,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void updateSummary(List<Transaction> transactions) {
+    public void updateSummary(List<Transaction> transactions) {
         double totalDebits = 0;
         double totalCredits = 0;
 
@@ -1703,55 +1811,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void refreshTransactions() {
-        // Reset all pagination state
-        currentPage = 0;
-        hasMoreData = true;
-        allTransactions.clear();
+        // Reset filter state except for manually excluded view
+        boolean wasViewingManuallyExcluded = currentFilterState.viewingManuallyExcluded;
+        currentFilterState = new FilterState();
+        currentFilterState.viewingManuallyExcluded = wasViewingManuallyExcluded;
 
+        // Clear existing data
+        allTransactions.clear();
         if (adapter != null) {
             adapter.clearTransactions();
         }
 
-        // Show loading indicator
-        if (loadingIndicator != null) {
-            loadingIndicator.setVisibility(View.VISIBLE);
+        // Use smart loading strategy to load transactions
+        if (smartLoadingStrategy != null) {
+            smartLoadingStrategy.loadTransactionsForDateRange(fromDate, toDate);
         }
-
-        // Explicitly load transactions from database
-        executorService.execute(() -> {
-            // Get all transactions for the current date range
-            List<Transaction> transactions = viewModel.getNonExcludedTransactionsBetweenDatesPaginatedSync(
-                    fromDate, toDate, PAGE_SIZE, 0);
-
-            runOnUiThread(() -> {
-                if (loadingIndicator != null) {
-                    loadingIndicator.setVisibility(View.GONE);
-                }
-
-                // Update UI with loaded transactions
-                if (transactions != null && !transactions.isEmpty()) {
-                    // Set transactions to adapter
-                    adapter.setTransactions(transactions);
-
-                    // Update all transactions list for filtering
-                    allTransactions.addAll(transactions);
-
-                    // Update summary
-                    updateSummary(transactions);
-
-                    // Update empty state
-                    if (emptyStateText != null) {
-                        emptyStateText.setVisibility(View.GONE);
-                    }
-
-                    // Increment page for pagination
-                    currentPage = 1;
-                } else if (emptyStateText != null) {
-                    // Show empty state if no transactions
-                    emptyStateText.setVisibility(View.VISIBLE);
-                }
-            });
-        });
     }
 
     private void checkAndRequestSMSPermissions() {
@@ -1839,17 +1913,17 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private static class FilterState {
-        private String bank = "All Banks";
-        private String type = "All Types";
-        private String category = null;
-        private String searchQuery = "";
-        private double minAmount = 0;
-        private double maxAmount = 100000;
-        private boolean showingExcluded = false;
-        private int sortOption = 0; // 0 = Date (newest first)
+    public static class FilterState {
+        public String bank = "All Banks";
+        public String type = "All Types";
+        public String category = null;
+        public String searchQuery = "";
+        public double minAmount = 0;
+        public double maxAmount = 100000;
+        public boolean showingExcluded = false;
+        public int sortOption = 0; // 0 = Date (newest first)
         private boolean filterManuallyExcluded = false; // NEW PROPERTY
-        private boolean viewingManuallyExcluded = false;
+        public boolean viewingManuallyExcluded = false;
 
         // Update the isAnyFilterActive method
         public boolean isAnyFilterActive() {
@@ -1956,5 +2030,21 @@ public class MainActivity extends AppCompatActivity {
 
             return result;
         }
+    }
+
+    /**
+     * Get the current from date
+     * @return The from date timestamp
+     */
+    public long getFromDate() {
+        return fromDate;
+    }
+
+    /**
+     * Get the current to date
+     * @return The to date timestamp
+     */
+    public long getToDate() {
+        return toDate;
     }
 }
