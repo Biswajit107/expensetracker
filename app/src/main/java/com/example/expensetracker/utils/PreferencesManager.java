@@ -8,6 +8,8 @@ public class PreferencesManager {
 
     private static final String KEY_VIEW_MODE_GROUPED = "view_mode_grouped";
 
+    private static final String KEY_GROUPING_MODE = "grouping_mode";
+
     private SharedPreferences prefs;
 
     public PreferencesManager(Context context) {
@@ -50,5 +52,21 @@ public class PreferencesManager {
      */
     public boolean getViewModePreference() {
         return prefs.getBoolean(KEY_VIEW_MODE_GROUPED, false);
+    }
+
+    /**
+     * Save user's preference for grouping mode
+     * @param groupingMode The grouping mode (0 = Day, 1 = Week, 2 = Month)
+     */
+    public void saveGroupingMode(int groupingMode) {
+        prefs.edit().putInt(KEY_GROUPING_MODE, groupingMode).apply();
+    }
+
+    /**
+     * Get user's preference for grouping mode
+     * @return The grouping mode (0 = Day, 1 = Week, 2 = Month)
+     */
+    public int getGroupingModePreference() {
+        return prefs.getInt(KEY_GROUPING_MODE, 0); // Default to day grouping
     }
 }

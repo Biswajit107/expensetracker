@@ -42,6 +42,7 @@ public class SmartLoadingStrategy {
     private final TextView emptyStateText;
     private final View loadingIndicator;
     private FilterState currentFilterState;
+    private int groupingMode = 0; // 0 = Day, 1 = Week, 2 = Month
 
     // Interfaces for loading callbacks
     public interface TransactionLoadCallback {
@@ -318,17 +319,13 @@ public class SmartLoadingStrategy {
 //        });
 //    }
 
-    /**
-     * Load transactions in grouped view (by date)
-     */
     private void loadGroupedTransactions(long fromDate, long toDate) {
-        Log.d(TAG, "Using grouped transaction view");
+        Log.d(TAG, "Using grouped transaction view with mode: " + groupingMode);
         executorService.execute(() -> {
             try {
                 TransactionDao dao = TransactionDatabase.getInstance(context).transactionDao();
 
                 // Load all transactions for the date range
-                // For grouped view, we need all data at once to group properly
                 List<Transaction> transactions;
 
                 if (currentFilterState.viewingManuallyExcluded) {
@@ -357,8 +354,8 @@ public class SmartLoadingStrategy {
                         }
 
                         if (finalTransactions != null && !finalTransactions.isEmpty()) {
-                            // Group transactions and update adapter
-                            groupedAdapter.setTransactions(finalTransactions);
+                            // Group transactions and update adapter with the grouping mode
+                            groupedAdapter.setTransactions(finalTransactions, groupingMode);
 
                             // Update summary in MainActivity
                             if (context instanceof MainActivity) {
@@ -376,7 +373,7 @@ public class SmartLoadingStrategy {
                             }
 
                             // Clear the adapter
-                            groupedAdapter.setTransactions(new ArrayList<>());
+                            groupedAdapter.setTransactions(new ArrayList<>(), groupingMode);
                         }
 
                         isLoading = false;
@@ -665,5 +662,36 @@ public class SmartLoadingStrategy {
                     break;
             }
         }
+    }
+
+    /**
+     * Set the grouping mode for transaction groups
+     * @param mode The grouping mode (0 = Day, 1 = Week, 2 = Month)
+     */
+    public void setGroupingMode(int mode) {
+        if (this.groupingMode != mode) {
+            this.groupingMode = mode;
+
+            // If we're in grouped view, reload with new grouping
+            if (isGroupedViewActive) {
+                // If context is MainActivity, get the date range
+                if (context instanceof MainActivity) {
+                    MainActivity activity = (MainActivity) context;
+                    long fromDate = activity.getFromDate();
+                    long toDate = activity.getToDate();
+
+                    // Reload grouped data with new grouping mode
+                    loadGroupedTransactions(fromDate, toDate);
+                }
+            }
+        }
+    }
+
+    /**
+     * Get the current grouping mode
+     * @return The grouping mode (0 = Day, 1 = Week, 2 = Month)
+     */
+    public int getGroupingMode() {
+        return groupingMode;
     }
 }

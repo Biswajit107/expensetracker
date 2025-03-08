@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Select View Mode"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp"/>
+
+    <RadioGroup
+        android:id="@+id/viewModeRadioGroup"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <RadioButton
+            android:id="@+id/listViewRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="List View"
+            android:padding="12dp"/>
+
+        <RadioButton
+            android:id="@+id/dayGroupRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Group by Day"
+            android:padding="12dp"/>
+
+        <RadioButton
+            android:id="@+id/weekGroupRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Group by Week"
+            android:padding="12dp"/>
+
+        <RadioButton
+            android:id="@+id/monthGroupRadio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Group by Month"
+            android:padding="12dp"/>
+    </RadioGroup>
+</LinearLayout>

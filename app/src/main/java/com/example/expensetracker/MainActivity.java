@@ -3,6 +3,7 @@ package com.example.expensetracker;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import android.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -21,12 +22,15 @@ import android.provider.Telephony;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
+import android.view.Menu;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -46,6 +50,7 @@ import com.github.mikephil.charting.data.LineData;
 import com.github.mikephil.charting.data.LineDataSet;
 import com.github.mikephil.charting.formatter.IndexAxisValueFormatter;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.chip.Chip;
@@ -55,6 +60,8 @@ import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.slider.RangeSlider;
 import com.google.android.material.textfield.TextInputEditText;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -106,8 +113,10 @@ public class MainActivity extends AppCompatActivity {
     private ViewMode currentViewMode = ViewMode.LIST; // Default to list mode
 
     private enum ViewMode {
-        LIST, // Individual transactions with pagination
-        GROUP // Grouped by date
+        LIST,           // Individual transactions with pagination
+        GROUP_BY_DAY,   // Grouped by day (current implementation)
+        GROUP_BY_WEEK,  // Grouped by week
+        GROUP_BY_MONTH  // Grouped by month
     }
 
     @Override
@@ -142,19 +151,32 @@ public class MainActivity extends AppCompatActivity {
         initializeSmartLoadingStrategy();
 
         boolean preferGroupedView = preferencesManager.getViewModePreference();
-        currentViewMode = preferGroupedView ? ViewMode.GROUP : ViewMode.LIST;
+        int groupingMode = preferencesManager.getGroupingModePreference();
+
+        if (preferGroupedView) {
+            switch (groupingMode) {
+                case 1:
+                    currentViewMode = ViewMode.GROUP_BY_WEEK;
+                    break;
+                case 2:
+                    currentViewMode = ViewMode.GROUP_BY_MONTH;
+                    break;
+                case 0:
+                default:
+                    currentViewMode = ViewMode.GROUP_BY_DAY;
+                    break;
+            }
+        } else {
+            currentViewMode = ViewMode.LIST;
+        }
+
         updateViewModeButtonAppearance();
 
-        // Automatically load transactions when the app starts
-        //resetPagination();
-
-        // Check if we need to process SMS messages on first launch
-//        viewModel.hasAnyTransactions(hasTransactions -> {
-//            if (!hasTransactions) {
-//                // If no transactions exist yet, process SMS messages
-//                loadExistingSMS();
-//            }
-//        });
+        // Apply user's preferred view mode to smart loading strategy
+        if (smartLoadingStrategy != null) {
+            smartLoadingStrategy.setGroupingMode(groupingMode);
+            smartLoadingStrategy.setForceViewMode(preferGroupedView);
+        }
     }
 
     private void initializeSmartLoadingStrategy() {
@@ -181,13 +203,13 @@ public class MainActivity extends AppCompatActivity {
             showEditTransactionDialog(transaction);
         });
 
-        // Load user's view mode preference
-        PreferencesManager preferencesManager = new PreferencesManager(this);
+//        // Load user's view mode preference
+//        PreferencesManager preferencesManager = new PreferencesManager(this);
         boolean preferGroupedView = preferencesManager.getViewModePreference();
-        currentViewMode = preferGroupedView ? ViewMode.GROUP : ViewMode.LIST;
-
-        // Apply user's preferred view mode
-        smartLoadingStrategy.setForceViewMode(preferGroupedView);
+//        currentViewMode = preferGroupedView ? ViewMode.GROUP : ViewMode.LIST;
+//
+//        // Apply user's preferred view mode
+//        smartLoadingStrategy.setForceViewMode(preferGroupedView);
 
         // Log the initial view mode
         Log.d(TAG, "Starting with " + (preferGroupedView ? "grouped" : "list") + " view based on user preference");
@@ -251,35 +273,145 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+//    private void toggleViewMode() {
+//        // Toggle mode
+//        currentViewMode = (currentViewMode == ViewMode.LIST) ? ViewMode.GROUP : ViewMode.LIST;
+//
+//        // Update button appearance
+//        updateViewModeButtonAppearance();
+//
+//        // Force smart loading strategy to use the selected view mode
+//        if (smartLoadingStrategy != null) {
+//            smartLoadingStrategy.setForceViewMode(currentViewMode == ViewMode.GROUP);
+//
+//            // Reload data with new view mode
+//            refreshTransactions();
+//        }
+//    }
+
+    /**
+     * Toggle the view mode - replaces the existing method
+     */
+//    private void toggleViewMode() {
+//        showGroupingModeSelector();
+//    }
+
+    /**
+     * Toggle the view mode - shows a popup menu with view options
+     */
     private void toggleViewMode() {
-        // Toggle mode
-        currentViewMode = (currentViewMode == ViewMode.LIST) ? ViewMode.GROUP : ViewMode.LIST;
+        // Create the popup menu
+        PopupMenu popup = new PopupMenu(this, viewModeButton);
 
-        // Update button appearance
-        updateViewModeButtonAppearance();
+        // Inflate the menu resource
+        popup.getMenuInflater().inflate(R.menu.view_mode_menu, popup.getMenu());
 
-        // Force smart loading strategy to use the selected view mode
-        if (smartLoadingStrategy != null) {
-            smartLoadingStrategy.setForceViewMode(currentViewMode == ViewMode.GROUP);
-
-            // Reload data with new view mode
-            refreshTransactions();
+        // Add icons to menu items (PopupMenu doesn't show icons by default)
+        // This requires a little workaround
+        try {
+            Field field = popup.getClass().getDeclaredField("mPopup");
+            field.setAccessible(true);
+            Object menuPopupHelper = field.get(popup);
+            Class<?> classPopupHelper = Class.forName(menuPopupHelper.getClass().getName());
+            Method setForceShowIcon = classPopupHelper.getMethod("setForceShowIcon", boolean.class);
+            setForceShowIcon.invoke(menuPopupHelper, true);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to show menu icons", e);
+            // Continue without icons if they can't be shown
         }
+
+        // Set currently selected item
+        Menu menu = popup.getMenu();
+        switch (currentViewMode) {
+            case LIST:
+                menu.findItem(R.id.menu_list_view).setChecked(true);
+                break;
+            case GROUP_BY_DAY:
+                menu.findItem(R.id.menu_day_view).setChecked(true);
+                break;
+            case GROUP_BY_WEEK:
+                menu.findItem(R.id.menu_week_view).setChecked(true);
+                break;
+            case GROUP_BY_MONTH:
+                menu.findItem(R.id.menu_month_view).setChecked(true);
+                break;
+        }
+
+        // Set click listener for menu items
+        popup.setOnMenuItemClickListener(item -> {
+            int groupingMode = 0;
+            ViewMode newViewMode;
+
+            switch (item.getItemId()) {
+                case R.id.menu_list_view:
+                    newViewMode = ViewMode.LIST;
+                    updateViewMode(newViewMode);
+                    preferencesManager.saveViewMode(false);
+                    return true;
+
+                case R.id.menu_day_view:
+                    groupingMode = 0; // Day grouping
+                    newViewMode = ViewMode.GROUP_BY_DAY;
+                    break;
+
+                case R.id.menu_week_view:
+                    groupingMode = 1; // Week grouping
+                    newViewMode = ViewMode.GROUP_BY_WEEK;
+                    break;
+
+                case R.id.menu_month_view:
+                    groupingMode = 2; // Month grouping
+                    newViewMode = ViewMode.GROUP_BY_MONTH;
+                    break;
+
+                default:
+                    return false;
+            }
+
+            // Update view mode and grouping mode
+            currentViewMode = newViewMode;
+            if (smartLoadingStrategy != null) {
+                smartLoadingStrategy.setGroupingMode(groupingMode);
+                smartLoadingStrategy.setForceViewMode(true);
+            }
+
+            // Save preferences
+            preferencesManager.saveViewMode(true);
+            preferencesManager.saveGroupingMode(groupingMode);
+
+            // Update UI
+            updateViewModeButtonAppearance();
+            return true;
+        });
+
+        // Show the popup menu
+        popup.show();
     }
 
+    /**
+     * Update the appearance of the view mode button based on current mode
+     */
     private void updateViewModeButtonAppearance() {
         if (viewModeButton == null) return;
 
-        if (currentViewMode == ViewMode.LIST) {
-            viewModeButton.setIcon(getDrawable(R.drawable.ic_view_list));
-            viewModeButton.setText("List View");
-        } else {
-            viewModeButton.setIcon(getDrawable(R.drawable.ic_view_module));
-            viewModeButton.setText("Group View");
+        switch (currentViewMode) {
+            case LIST:
+                viewModeButton.setIcon(getDrawable(R.drawable.ic_view_list));
+                viewModeButton.setText("List View");
+                break;
+            case GROUP_BY_DAY:
+                viewModeButton.setIcon(getDrawable(R.drawable.ic_view_module));
+                viewModeButton.setText("Day View");
+                break;
+            case GROUP_BY_WEEK:
+                viewModeButton.setIcon(getDrawable(R.drawable.ic_view_module));
+                viewModeButton.setText("Week View");
+                break;
+            case GROUP_BY_MONTH:
+                viewModeButton.setIcon(getDrawable(R.drawable.ic_view_module));
+                viewModeButton.setText("Month View");
+                break;
         }
-
-        PreferencesManager preferencesManager = new PreferencesManager(this);
-        preferencesManager.saveViewMode(currentViewMode == ViewMode.GROUP);
     }
 
     private void setupRecyclerView() {
@@ -2046,5 +2178,125 @@ public class MainActivity extends AppCompatActivity {
      */
     public long getToDate() {
         return toDate;
+    }
+
+    /**
+     * Show dialog to choose grouping mode
+     */
+    private void showGroupingModeSelector() {
+        // Get the current view mode and grouping mode
+        boolean isGroupView = currentViewMode != ViewMode.LIST;
+        int currentGroupingMode = 0; // Default to day grouping
+
+        // Get grouping mode from SmartLoadingStrategy if available
+        if (smartLoadingStrategy != null) {
+            currentGroupingMode = smartLoadingStrategy.getGroupingMode();
+        }
+
+        // Create bottom sheet dialog
+        BottomSheetDialog dialog = new BottomSheetDialog(this);
+        View dialogView = getLayoutInflater().inflate(R.layout.group_mode_selector, null);
+        dialog.setContentView(dialogView);
+
+        // Get radio group and buttons
+        RadioGroup radioGroup = dialogView.findViewById(R.id.viewModeRadioGroup);
+        RadioButton listViewRadio = dialogView.findViewById(R.id.listViewRadio);
+        RadioButton dayGroupRadio = dialogView.findViewById(R.id.dayGroupRadio);
+        RadioButton weekGroupRadio = dialogView.findViewById(R.id.weekGroupRadio);
+        RadioButton monthGroupRadio = dialogView.findViewById(R.id.monthGroupRadio);
+
+        // Set initial selection based on current view mode
+        if (!isGroupView) {
+            listViewRadio.setChecked(true);
+        } else {
+            switch (currentGroupingMode) {
+                case 0: // Day grouping
+                    dayGroupRadio.setChecked(true);
+                    break;
+                case 1: // Week grouping
+                    weekGroupRadio.setChecked(true);
+                    break;
+                case 2: // Month grouping
+                    monthGroupRadio.setChecked(true);
+                    break;
+            }
+        }
+
+        // Set radio button change listener
+        radioGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            if (checkedId == listViewRadio.getId()) {
+                // Switch to list view
+                updateViewMode(ViewMode.LIST);
+                // Save preference
+                preferencesManager.saveViewMode(false);
+            } else {
+                // Determine grouping mode based on selected radio button
+                int groupingMode = 0; // Default to day grouping
+                ViewMode newViewMode = ViewMode.GROUP_BY_DAY;
+
+                if (checkedId == weekGroupRadio.getId()) {
+                    groupingMode = 1;
+                    newViewMode = ViewMode.GROUP_BY_WEEK;
+                } else if (checkedId == monthGroupRadio.getId()) {
+                    groupingMode = 2;
+                    newViewMode = ViewMode.GROUP_BY_MONTH;
+                }
+
+                // Update view mode and grouping mode
+                currentViewMode = newViewMode;
+                if (smartLoadingStrategy != null) {
+                    smartLoadingStrategy.setGroupingMode(groupingMode);
+                    smartLoadingStrategy.setForceViewMode(true);
+                }
+
+                // Save preferences
+                preferencesManager.saveViewMode(true);
+                preferencesManager.saveGroupingMode(groupingMode);
+
+                // Update UI
+                updateViewModeButtonAppearance();
+            }
+
+            dialog.dismiss();
+        });
+
+        dialog.show();
+    }
+
+    /**
+     * Update the current view mode
+     */
+    private void updateViewMode(ViewMode viewMode) {
+        // Only process if we're actually changing the mode
+        if (currentViewMode == viewMode) {
+            return; // No change needed
+        }
+
+        currentViewMode = viewMode;
+
+        // Update button appearance
+        updateViewModeButtonAppearance();
+
+        // Update SmartLoadingStrategy
+        if (smartLoadingStrategy != null) {
+            boolean isGroupView = viewMode != ViewMode.LIST;
+            smartLoadingStrategy.setForceViewMode(isGroupView);
+
+            // Set appropriate grouping mode based on view mode
+            if (isGroupView) {
+                int groupingMode = 0; // Default to day grouping
+
+                if (viewMode == ViewMode.GROUP_BY_WEEK) {
+                    groupingMode = 1;
+                } else if (viewMode == ViewMode.GROUP_BY_MONTH) {
+                    groupingMode = 2;
+                }
+
+                smartLoadingStrategy.setGroupingMode(groupingMode);
+            }
+
+            // Reload data
+            refreshTransactions();
+        }
     }
 }

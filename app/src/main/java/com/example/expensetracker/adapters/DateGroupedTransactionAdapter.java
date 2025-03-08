@@ -1,6 +1,8 @@
 package com.example.expensetracker.adapters;
 
 import android.content.Context;
+import android.graphics.Color;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.expensetracker.R;
 import com.example.expensetracker.models.Transaction;
 
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -23,196 +26,283 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.TreeMap;
 
 /**
- * Adapter for displaying transactions grouped by date
+ * Adapter for displaying transactions grouped by date with configurable grouping level
  */
-public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGroupedTransactionAdapter.DateGroupViewHolder> {
+public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGroupedTransactionAdapter.GroupViewHolder> {
+    private static final String TAG = "DateGroupedAdapter";
 
+    // Grouping mode constants
+    public static final int GROUP_BY_DAY = 0;
+    public static final int GROUP_BY_WEEK = 1;
+    public static final int GROUP_BY_MONTH = 2;
+
+    private final Context context;
     private List<DateGroup> dateGroups = new ArrayList<>();
-    private TransactionAdapter.OnTransactionClickListener transactionClickListener;
-    private Context context;
+    private TransactionAdapter.OnTransactionClickListener listener;
+    private int currentGroupingMode = GROUP_BY_DAY; // Default to day grouping
 
-    // Limit of transactions to show per group before "Show More" option
-    private static final int INITIAL_TRANSACTION_LIMIT = 3;
-
-    /**
-     * Constructor requiring context for formatting
-     */
     public DateGroupedTransactionAdapter(Context context) {
         this.context = context;
     }
 
     /**
-     * Set transaction click listener to pass through to child adapters
+     * Set the transaction click listener that will be passed to the nested TransactionAdapter
      */
     public void setOnTransactionClickListener(TransactionAdapter.OnTransactionClickListener listener) {
-        this.transactionClickListener = listener;
+        this.listener = listener;
 
-        // Update existing child adapters
-        for (DateGroup group : dateGroups) {
-            if (group.adapter != null) {
-                group.adapter.setOnTransactionClickListener(listener);
-            }
-        }
-    }
-
-    /**
-     * Group transactions by date and set them to this adapter
-     */
-    public void setTransactions(List<Transaction> transactions) {
-        // Group transactions by date
-        Map<Long, List<Transaction>> groupedByDate = groupTransactionsByDate(transactions);
-
-        // Convert to adapter's data structure
-        List<DateGroup> newDateGroups = new ArrayList<>();
-
-        for (Map.Entry<Long, List<Transaction>> entry : groupedByDate.entrySet()) {
-            List<Transaction> dayTransactions = entry.getValue();
-
-            // Calculate totals for this date
-            double totalDebit = 0;
-            double totalCredit = 0;
-
-            for (Transaction transaction : dayTransactions) {
-                if (!transaction.isExcludedFromTotal()) {
-                    if (transaction.isDebit()) {
-                        totalDebit += transaction.getAmount();
-                    } else {
-                        totalCredit += transaction.getAmount();
-                    }
-                }
-            }
-
-            // Create date group
-            DateGroup group = new DateGroup(
-                    entry.getKey(),
-                    dayTransactions,
-                    totalDebit,
-                    totalCredit,
-                    dayTransactions.size()
-            );
-
-            newDateGroups.add(group);
-        }
-
-        // Sort by date (newest first)
-        Collections.sort(newDateGroups, (a, b) -> Long.compare(b.dateTimestamp, a.dateTimestamp));
-
-        // Update data and notify
-        this.dateGroups = newDateGroups;
+        // Update listener in any existing nested adapters
         notifyDataSetChanged();
     }
 
     /**
-     * Update a single transaction within the grouped structure
-     * @param updatedTransaction The updated transaction
+     * Set the transactions and group them according to the specified mode
      */
-    public void updateTransaction(Transaction updatedTransaction) {
-        if (updatedTransaction == null) return;
+    public void setTransactions(List<Transaction> transactions, int groupingMode) {
+        this.currentGroupingMode = groupingMode;
 
-        boolean found = false;
-
-        // We need to find which date group contains this transaction
-        for (DateGroup group : dateGroups) {
-            for (int i = 0; i < group.transactions.size(); i++) {
-                Transaction transaction = group.transactions.get(i);
-                if (transaction.getId() == updatedTransaction.getId()) {
-                    // Replace the transaction
-                    group.transactions.set(i, updatedTransaction);
-                    found = true;
-
-                    // Recalculate group totals
-                    double totalDebit = 0;
-                    double totalCredit = 0;
-
-                    for (Transaction t : group.transactions) {
-                        if (!t.isExcludedFromTotal()) {
-                            if (t.isDebit()) {
-                                totalDebit += t.getAmount();
-                            } else {
-                                totalCredit += t.getAmount();
-                            }
-                        }
-                    }
-
-                    // Update group data
-                    group.totalDebit = totalDebit;
-                    group.totalCredit = totalCredit;
-
-                    // Update the adapter
-                    if (group.adapter != null) {
-                        group.adapter.setTransactions(group.transactions);
-                    }
-
-                    // Notify data changed for this group
-                    int groupIndex = dateGroups.indexOf(group);
-                    if (groupIndex >= 0) {
-                        notifyItemChanged(groupIndex);
-                    }
-
-                    break;
-                }
-            }
-            if (found) break;
+        if (transactions == null || transactions.isEmpty()) {
+            dateGroups = new ArrayList<>();
+            notifyDataSetChanged();
+            return;
         }
 
-        // If transaction wasn't found in any group, it might belong to a different date range
-        // In this case, a full reload might be necessary, but that's handled by the caller
+        // Create groups based on the grouping mode
+        switch (groupingMode) {
+            case GROUP_BY_WEEK:
+                dateGroups = groupTransactionsByWeek(transactions);
+                break;
+            case GROUP_BY_MONTH:
+                dateGroups = groupTransactionsByMonth(transactions);
+                break;
+            case GROUP_BY_DAY:
+            default:
+                dateGroups = groupTransactionsByDay(transactions);
+                break;
+        }
+
+        notifyDataSetChanged();
     }
 
     /**
-     * Group transactions by date (day)
+     * Update a single transaction in the adapter
+     * This finds the transaction by ID and updates it in the appropriate group
      */
-    private Map<Long, List<Transaction>> groupTransactionsByDate(List<Transaction> transactions) {
-        // TreeMap to have entries naturally sorted by key (timestamp)
-        Map<Long, List<Transaction>> groupedTransactions = new TreeMap<>(Collections.reverseOrder());
+    public void updateTransaction(Transaction updatedTransaction) {
+        boolean found = false;
 
-        if (transactions == null || transactions.isEmpty()) {
-            return groupedTransactions;
+        // Search each group for the transaction to update
+        for (DateGroup group : dateGroups) {
+            List<Transaction> transactions = group.getTransactions();
+            for (int i = 0; i < transactions.size(); i++) {
+                if (transactions.get(i).getId() == updatedTransaction.getId()) {
+                    // Found the transaction to update
+                    transactions.set(i, updatedTransaction);
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found) break;
         }
 
+        if (found) {
+            // Refresh the view to show updated data
+            notifyDataSetChanged();
+        }
+    }
+
+    /**
+     * Group transactions by day
+     */
+    private List<DateGroup> groupTransactionsByDay(List<Transaction> transactions) {
+        // Sort transactions by date (newest first)
+        Collections.sort(transactions, (a, b) -> Long.compare(b.getDate(), a.getDate()));
+
+        // Group by day
+        Map<String, List<Transaction>> groupedMap = new HashMap<>();
+        SimpleDateFormat dateKeyFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault());
+
+        for (Transaction transaction : transactions) {
+            String dateKey = dateKeyFormat.format(new Date(transaction.getDate()));
+
+            if (!groupedMap.containsKey(dateKey)) {
+                groupedMap.put(dateKey, new ArrayList<>());
+            }
+
+            groupedMap.get(dateKey).add(transaction);
+        }
+
+        // Create date groups
+        List<DateGroup> groups = new ArrayList<>();
+        SimpleDateFormat dateLabelFormat = new SimpleDateFormat("EEE, MMM d, yyyy", Locale.getDefault());
+
+        for (Map.Entry<String, List<Transaction>> entry : groupedMap.entrySet()) {
+            try {
+                Date groupDate = dateKeyFormat.parse(entry.getKey());
+                String dateLabel = dateLabelFormat.format(groupDate);
+
+                groups.add(new DateGroup(
+                        dateLabel,
+                        entry.getValue(),
+                        groupDate.getTime()
+                ));
+            } catch (ParseException e) {
+                Log.e(TAG, "Error parsing date: " + e.getMessage());
+            }
+        }
+
+        // Sort groups by date (newest first)
+        Collections.sort(groups, (a, b) -> Long.compare(b.getTimestamp(), a.getTimestamp()));
+
+        return groups;
+    }
+
+    /**
+     * Group transactions by week
+     */
+    private List<DateGroup> groupTransactionsByWeek(List<Transaction> transactions) {
+        // Sort transactions by date (newest first)
+        Collections.sort(transactions, (a, b) -> Long.compare(b.getDate(), a.getDate()));
+
+        // Group by week
+        Map<String, List<Transaction>> groupedMap = new HashMap<>();
+        Calendar calendar = Calendar.getInstance();
+        SimpleDateFormat weekLabelFormat = new SimpleDateFormat("MMM d", Locale.getDefault());
+
+        for (Transaction transaction : transactions) {
+            calendar.setTimeInMillis(transaction.getDate());
+
+            // Get week of year and year
+            int year = calendar.get(Calendar.YEAR);
+            int weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR);
+
+            // Create week key
+            String weekKey = year + "-" + weekOfYear;
+
+            if (!groupedMap.containsKey(weekKey)) {
+                groupedMap.put(weekKey, new ArrayList<>());
+            }
+
+            groupedMap.get(weekKey).add(transaction);
+        }
+
+        // Create week groups
+        List<DateGroup> groups = new ArrayList<>();
+
+        for (Map.Entry<String, List<Transaction>> entry : groupedMap.entrySet()) {
+            List<Transaction> weekTransactions = entry.getValue();
+
+            // Sort week transactions to find first and last day
+            Collections.sort(weekTransactions, (a, b) -> Long.compare(a.getDate(), b.getDate()));
+
+            // Get first and last transaction dates
+            long firstDay = weekTransactions.get(0).getDate();
+            long lastDay = weekTransactions.get(weekTransactions.size() - 1).getDate();
+
+            // Format week label: "May 1 - May 7, 2023"
+            Calendar firstCal = Calendar.getInstance();
+            firstCal.setTimeInMillis(firstDay);
+            Calendar lastCal = Calendar.getInstance();
+            lastCal.setTimeInMillis(lastDay);
+
+            String startDayStr = weekLabelFormat.format(firstCal.getTime());
+            String endDayStr = weekLabelFormat.format(lastCal.getTime());
+
+            // Add year only if the week spans different years or if it's end of the range
+            if (firstCal.get(Calendar.YEAR) != lastCal.get(Calendar.YEAR)) {
+                startDayStr += ", " + firstCal.get(Calendar.YEAR);
+                endDayStr += ", " + lastCal.get(Calendar.YEAR);
+            } else {
+                endDayStr += ", " + lastCal.get(Calendar.YEAR);
+            }
+
+            String weekLabel = "Week of " + startDayStr + " - " + endDayStr;
+
+            groups.add(new DateGroup(
+                    weekLabel,
+                    weekTransactions,
+                    firstDay
+            ));
+        }
+
+        // Sort groups by date (newest first)
+        Collections.sort(groups, (a, b) -> Long.compare(b.getTimestamp(), a.getTimestamp()));
+
+        return groups;
+    }
+
+    /**
+     * Group transactions by month
+     */
+    private List<DateGroup> groupTransactionsByMonth(List<Transaction> transactions) {
+        // Sort transactions by date (newest first)
+        Collections.sort(transactions, (a, b) -> Long.compare(b.getDate(), a.getDate()));
+
+        // Group by month
+        Map<String, List<Transaction>> groupedMap = new HashMap<>();
         Calendar calendar = Calendar.getInstance();
 
         for (Transaction transaction : transactions) {
-            // Get transaction date and normalize to start of day
             calendar.setTimeInMillis(transaction.getDate());
-            calendar.set(Calendar.HOUR_OF_DAY, 0);
-            calendar.set(Calendar.MINUTE, 0);
-            calendar.set(Calendar.SECOND, 0);
-            calendar.set(Calendar.MILLISECOND, 0);
 
-            long dayTimestamp = calendar.getTimeInMillis();
+            // Get month and year
+            int year = calendar.get(Calendar.YEAR);
+            int month = calendar.get(Calendar.MONTH);
 
-            // Add transaction to its day group
-            if (!groupedTransactions.containsKey(dayTimestamp)) {
-                groupedTransactions.put(dayTimestamp, new ArrayList<>());
+            // Create month key
+            String monthKey = year + "-" + month;
+
+            if (!groupedMap.containsKey(monthKey)) {
+                groupedMap.put(monthKey, new ArrayList<>());
             }
 
-            groupedTransactions.get(dayTimestamp).add(transaction);
+            groupedMap.get(monthKey).add(transaction);
         }
 
-        // Sort transactions within each group (by amount, highest first)
-        for (List<Transaction> group : groupedTransactions.values()) {
-            Collections.sort(group, (a, b) -> Double.compare(b.getAmount(), a.getAmount()));
+        // Create month groups
+        List<DateGroup> groups = new ArrayList<>();
+        SimpleDateFormat monthLabelFormat = new SimpleDateFormat("MMMM yyyy", Locale.getDefault());
+
+        for (Map.Entry<String, List<Transaction>> entry : groupedMap.entrySet()) {
+            String[] keyParts = entry.getKey().split("-");
+            int year = Integer.parseInt(keyParts[0]);
+            int month = Integer.parseInt(keyParts[1]);
+
+            // Create calendar for this month
+            Calendar monthCal = Calendar.getInstance();
+            monthCal.set(year, month, 1, 0, 0, 0);
+            monthCal.set(Calendar.MILLISECOND, 0);
+
+            String monthLabel = monthLabelFormat.format(monthCal.getTime());
+
+            groups.add(new DateGroup(
+                    monthLabel,
+                    entry.getValue(),
+                    monthCal.getTimeInMillis()
+            ));
         }
 
-        return groupedTransactions;
+        // Sort groups by date (newest first)
+        Collections.sort(groups, (a, b) -> Long.compare(b.getTimestamp(), a.getTimestamp()));
+
+        return groups;
     }
 
     @NonNull
     @Override
-    public DateGroupViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+    public GroupViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext())
                 .inflate(R.layout.item_date_group, parent, false);
-        return new DateGroupViewHolder(view);
+        return new GroupViewHolder(view);
     }
 
     @Override
-    public void onBindViewHolder(@NonNull DateGroupViewHolder holder, int position) {
-        DateGroup dateGroup = dateGroups.get(position);
-        holder.bind(dateGroup);
+    public void onBindViewHolder(@NonNull GroupViewHolder holder, int position) {
+        DateGroup group = dateGroups.get(position);
+        holder.bind(group, position);
     }
 
     @Override
@@ -221,128 +311,141 @@ public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGrou
     }
 
     /**
-     * ViewHolder for date groups
+     * ViewHolder for date group items
      */
-    class DateGroupViewHolder extends RecyclerView.ViewHolder {
-        private TextView dateGroupText;
-        private TextView transactionCountText;
-        private TextView totalAmountText;
-        private RecyclerView nestedTransactionList;
+    class GroupViewHolder extends RecyclerView.ViewHolder {
+        private final TextView dateGroupText;
+        private final TextView transactionCountText;
+        private final TextView totalAmountText;
+        private final ImageView expansionIndicator;
+        private final RecyclerView nestedTransactionList;
+        private final View dateGroupHeader;
 
-        // Child adapter for this group's transactions
-        private TransactionAdapter adapter;
-
-        public DateGroupViewHolder(@NonNull View itemView) {
+        public GroupViewHolder(@NonNull View itemView) {
             super(itemView);
             dateGroupText = itemView.findViewById(R.id.dateGroupText);
             transactionCountText = itemView.findViewById(R.id.transactionCountText);
             totalAmountText = itemView.findViewById(R.id.totalAmountText);
+            expansionIndicator = itemView.findViewById(R.id.expansionIndicator);
             nestedTransactionList = itemView.findViewById(R.id.nestedTransactionList);
+            dateGroupHeader = itemView.findViewById(R.id.dateGroupHeader);
 
-            // Setup nested RecyclerView
-            nestedTransactionList.setLayoutManager(new LinearLayoutManager(itemView.getContext()));
-            adapter = new TransactionAdapter();
-            nestedTransactionList.setAdapter(adapter);
+            // Set up nested RecyclerView
+            nestedTransactionList.setLayoutManager(new LinearLayoutManager(context));
+            nestedTransactionList.setNestedScrollingEnabled(false);
 
-            // Pass through click listener if already set
-            if (transactionClickListener != null) {
-                adapter.setOnTransactionClickListener(transactionClickListener);
-            }
+            // Set click listener for group header
+            dateGroupHeader.setOnClickListener(v -> {
+                int position = getAdapterPosition();
+                if (position != RecyclerView.NO_POSITION) {
+                    DateGroup group = dateGroups.get(position);
+                    toggleGroupExpansion(group, position);
+                }
+            });
         }
 
-        void bind(DateGroup dateGroup) {
-            // Set date header
-            SimpleDateFormat dateFormat = new SimpleDateFormat("EEEE, MMMM d, yyyy", Locale.getDefault());
-            dateGroupText.setText(dateFormat.format(new Date(dateGroup.dateTimestamp)));
+        /**
+         * Toggle group expansion state
+         */
+        private void toggleGroupExpansion(DateGroup group, int position) {
+            group.setExpanded(!group.isExpanded());
 
-            // Set transaction count
-            transactionCountText.setText(String.format(Locale.getDefault(),
-                    "%d transaction(s)", dateGroup.transactionCount));
+            // Update expansion state in the UI
+            updateExpansionState(group);
 
-            // Set total amount
-            double netAmount = dateGroup.totalCredit - dateGroup.totalDebit;
-            totalAmountText.setText(String.format(Locale.getDefault(), "₹%.2f", netAmount));
+            // Notify adapter of the change for smooth animation
+            notifyItemChanged(position);
+        }
 
-            // Set text color based on net amount
-            if (netAmount > 0) {
-                totalAmountText.setTextColor(context.getColor(R.color.green));
-            } else if (netAmount < 0) {
+        /**
+         * Bind data to the view
+         */
+        public void bind(DateGroup group, int position) {
+            // Set group title and details
+            dateGroupText.setText(group.getLabel());
+            int count = group.getTransactionCount();
+            transactionCountText.setText(count == 1
+                    ? "1 transaction"
+                    : count + " transactions");
+
+            // Format and set total amount
+            double totalAmount = group.getTotalAmount();
+            totalAmountText.setText(String.format(Locale.getDefault(), "₹%.2f", totalAmount));
+
+            // Set amount text color based on value
+            if (totalAmount > 0) {
                 totalAmountText.setTextColor(context.getColor(R.color.red));
+            } else if (totalAmount < 0) {
+                totalAmountText.setTextColor(context.getColor(R.color.green));
             } else {
                 totalAmountText.setTextColor(context.getColor(R.color.text_primary));
             }
 
-            // Store reference to adapter in date group for later updates
-            dateGroup.adapter = adapter;
+            // Set up nested transaction list if expanded
+            updateExpansionState(group);
 
-            // Control transaction list visibility based on expanded state
-            if (dateGroup.expanded) {
-                // Show all transactions if expanded
-                adapter.setTransactions(dateGroup.transactions);
-                nestedTransactionList.setVisibility(View.VISIBLE);
-            } else {
-                // Hide all transactions if collapsed - show only summary
-                adapter.setTransactions(new ArrayList<>());
-                nestedTransactionList.setVisibility(View.GONE);
-            }
-
-            // Look for expansion indicator if it exists in the layout
-            ImageView expansionIndicator = itemView.findViewById(R.id.expansionIndicator);
-            if (expansionIndicator != null) {
-                // Set the appropriate icon based on expanded state
-                expansionIndicator.setImageResource(
-                        dateGroup.expanded ? R.drawable.ic_expand_less : R.drawable.ic_expand_more);
-            }
-
-            // Setup click listener for the group header to expand/collapse
-            View groupHeader = itemView.findViewById(R.id.dateGroupHeader);
-            if (groupHeader != null) {
-                groupHeader.setOnClickListener(v -> {
-                    // Toggle expanded state
-                    dateGroup.expanded = !dateGroup.expanded;
-
-                    // Update visibility and content based on new state
-                    if (dateGroup.expanded) {
-                        adapter.setTransactions(dateGroup.transactions);
-                        nestedTransactionList.setVisibility(View.VISIBLE);
-
-                        // Update indicator if it exists
-                        if (expansionIndicator != null) {
-                            expansionIndicator.setImageResource(R.drawable.ic_expand_less);
-                        }
-                    } else {
-                        nestedTransactionList.setVisibility(View.GONE);
-
-                        // Update indicator if it exists
-                        if (expansionIndicator != null) {
-                            expansionIndicator.setImageResource(R.drawable.ic_expand_more);
-                        }
-                    }
-                });
+            // If expanded, set up the nested adapter with the group's transactions
+            if (group.isExpanded()) {
+                TransactionAdapter nestedAdapter = new TransactionAdapter();
+                if (listener != null) {
+                    nestedAdapter.setOnTransactionClickListener(listener);
+                }
+                nestedAdapter.setTransactions(group.getTransactions());
+                nestedTransactionList.setAdapter(nestedAdapter);
             }
         }
 
+        /**
+         * Update the expansion state UI (expand/collapse indicators)
+         */
+        private void updateExpansionState(DateGroup group) {
+            if (group.isExpanded()) {
+                // Expanded state
+                expansionIndicator.setImageResource(R.drawable.ic_expand_less);
+                nestedTransactionList.setVisibility(View.VISIBLE);
+            } else {
+                // Collapsed state
+                expansionIndicator.setImageResource(R.drawable.ic_expand_more);
+                nestedTransactionList.setVisibility(View.GONE);
+            }
+        }
     }
 
     /**
-     * Data class to hold information about a date group
+     * Data class for a date group
      */
     public static class DateGroup {
-        final long dateTimestamp;
-        final List<Transaction> transactions;
-        double totalDebit;
-        double totalCredit;
-        final int transactionCount;
-        boolean expanded = false;
-        TransactionAdapter adapter = null;
+        private final String label;
+        private final List<Transaction> transactions;
+        private final long timestamp;
+        private boolean isExpanded = false;
 
-        public DateGroup(long dateTimestamp, List<Transaction> transactions,
-                         double totalDebit, double totalCredit, int transactionCount) {
-            this.dateTimestamp = dateTimestamp;
+        public DateGroup(String label, List<Transaction> transactions, long timestamp) {
+            this.label = label;
             this.transactions = transactions;
-            this.totalDebit = totalDebit;
-            this.totalCredit = totalCredit;
-            this.transactionCount = transactionCount;
+            this.timestamp = timestamp;
+        }
+
+        public String getLabel() { return label; }
+        public List<Transaction> getTransactions() { return transactions; }
+        public int getTransactionCount() { return transactions.size(); }
+        public long getTimestamp() { return timestamp; }
+        public boolean isExpanded() { return isExpanded; }
+        public void setExpanded(boolean expanded) { isExpanded = expanded; }
+
+        /**
+         * Calculate total amount for this group
+         */
+        public double getTotalAmount() {
+            double totalAmount = 0;
+            for (Transaction transaction : transactions) {
+                if (transaction.isDebit()) {
+                    totalAmount += transaction.getAmount();
+                } else {
+                    totalAmount -= transaction.getAmount();
+                }
+            }
+            return totalAmount;
         }
     }
 }
