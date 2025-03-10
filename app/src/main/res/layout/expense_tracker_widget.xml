@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFF"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <!-- Header -->
+    <TextView
+        android:id="@+id/widgetTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#6200EE"
+        android:padding="8dp"
+        android:text="Expense Tracker"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp" />
+
+    <!-- Simple content -->
+    <TextView
+        android:id="@+id/incomeText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Income: ₹45,000"
+        android:textColor="#4CAF50" />
+
+    <TextView
+        android:id="@+id/expensesText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Expenses: ₹32,500"
+        android:textColor="#F44336" />
+
+    <TextView
+        android:id="@+id/remainingText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Remaining: ₹12,500"
+        android:textColor="#2196F3" />
+
+    <!-- Update timestamp to see when widget was last refreshed -->
+    <TextView
+        android:id="@+id/lastUpdatedText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Last updated: "
+        android:textSize="10sp" />
+</LinearLayout>

@@ -49,6 +49,20 @@
             </intent-filter>
         </receiver>
 
+        <!-- Widget Provider Declaration -->
+        <receiver
+            android:name=".widget.ModernExpenseWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.expensetracker.widget.UPDATE_WIDGET" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/modern_expense_widget_info" />
+        </receiver>
+
+
     </application>
 
 </manifest>

@@ -177,6 +177,7 @@ public class MainActivity extends AppCompatActivity {
             smartLoadingStrategy.setGroupingMode(groupingMode);
             smartLoadingStrategy.setForceViewMode(preferGroupedView);
         }
+
     }
 
     private void initializeSmartLoadingStrategy() {
@@ -465,6 +466,21 @@ public class MainActivity extends AppCompatActivity {
             // Instead of calling updateTransactionsList() which resets filters,
             // we'll just update the transaction in our local lists and adapter
             updateTransactionInLists(editedTransaction);
+
+            // Force adapter to refresh this specific item's visual appearance
+            int position = -1;
+            List<Transaction> currentTransactions = adapter.getTransactions();
+            for (int i = 0; i < currentTransactions.size(); i++) {
+                if (currentTransactions.get(i).getId() == editedTransaction.getId()) {
+                    position = i;
+                    break;
+                }
+            }
+
+            if (position >= 0) {
+                adapter.notifyItemChanged(position);
+            }
+
         });
 
         // Show the dialog
@@ -485,6 +501,20 @@ public class MainActivity extends AppCompatActivity {
 
         // Update the adapter with the properly filtered list
         adapter.setTransactions(filteredList);
+
+        // Notify the adapter about the specific change
+        // This forces a visual update of the transaction in the list
+        for (int i = 0; i < adapter.getTransactions().size(); i++) {
+            if (adapter.getTransactions().get(i).getId() == editedTransaction.getId()) {
+                adapter.notifyItemChanged(i);
+                break;
+            }
+        }
+
+        // Also update in smartLoadingStrategy if available
+        if (smartLoadingStrategy != null) {
+            smartLoadingStrategy.updateTransactionInAdapters(editedTransaction);
+        }
 
         // Update the summary
         updateSummary(filteredList);
@@ -612,6 +642,11 @@ public class MainActivity extends AppCompatActivity {
         }
 
         loadMoreTransactions();
+
+        setupSpendingChart();
+
+        updateSummary(adapter.getTransactions());
+
     }
 
     private void setupSearch() {
@@ -1364,7 +1399,7 @@ public class MainActivity extends AppCompatActivity {
         executorService.execute(() -> {
             List<Transaction> chartTransactions = TransactionDatabase.getInstance(this)
                     .transactionDao()
-                    .getTransactionsBetweenDatesSync(chartStartDate, chartEndDate);
+                    .getTransactionsBetweenDatesSyncAscending(chartStartDate, chartEndDate);
 
             // Group transactions by day
             Map<Long, Float> dailySpending = new TreeMap<>();
@@ -1958,6 +1993,8 @@ public class MainActivity extends AppCompatActivity {
         if (smartLoadingStrategy != null) {
             smartLoadingStrategy.loadTransactionsForDateRange(fromDate, toDate);
         }
+
+        setupSpendingChart();
     }
 
     private void checkAndRequestSMSPermissions() {
