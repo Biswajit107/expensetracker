@@ -2069,7 +2069,7 @@ public class MainActivity extends AppCompatActivity {
             loadManuallyExcludedTransactions();
         } else {
             // Otherwise, refresh the regular transactions view
-            resetPagination();
+            refreshTransactions();
         }
     }
 

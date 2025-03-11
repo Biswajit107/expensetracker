@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- res/layout/widget_budget_compact_blue.xml -->
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/widget_compact_background"
+    android:padding="8dp">
+
+    <!-- Header Row: Title and Date -->
+    <TextView
+        android:id="@+id/widgetTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
+        android:text="Budget Status"
+        android:textColor="#333333"
+        android:textSize="10sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/dateText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
+        android:layout_alignBaseline="@id/widgetTitle"
+        android:text="Mar 10"
+        android:textColor="#666666"
+        android:textSize="9sp" />
+
+    <!-- Main Amount Row -->
+    <TextView
+        android:id="@+id/remainingText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/widgetTitle"
+        android:layout_alignParentStart="true"
+        android:layout_marginTop="4dp"
+        android:text="₹28.7K"
+        android:textColor="#1976D2"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/remainingLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignBaseline="@id/remainingText"
+        android:layout_toEndOf="@id/remainingText"
+        android:layout_marginStart="2dp"
+        android:text="remaining"
+        android:textColor="#666666"
+        android:textSize="8sp" />
+
+    <!-- Progress Bar -->
+    <ProgressBar
+        android:id="@+id/budgetProgress"
+        style="@android:style/Widget.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:layout_below="@id/remainingText"
+        android:layout_marginTop="4dp"
+        android:progressDrawable="@drawable/progress_blue"
+        android:progress="65" />
+
+    <!-- Divider -->
+    <TextView
+        android:id="@+id/divider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_below="@id/budgetProgress"
+        android:layout_marginTop="4dp"
+        android:background="#EEEEEE" />
+
+    <!-- Stats Row Container to align everything properly -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/divider"
+        android:layout_marginTop="4dp">
+
+        <!-- Income text and label -->
+        <TextView
+            android:id="@+id/incomeText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:text="₹1.2K"
+            android:textColor="#4CAF50"
+            android:textSize="9sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/incomeLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignBaseline="@id/incomeText"
+            android:layout_toEndOf="@id/incomeText"
+            android:layout_marginStart="2dp"
+            android:text="income"
+            android:textColor="#666666"
+            android:textSize="7sp" />
+
+        <!-- Spent text and label -->
+        <TextView
+            android:id="@+id/spentText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="45dp"
+            android:layout_toEndOf="@id/incomeText"
+            android:text="₹71.3K"
+            android:textColor="#F44336"
+            android:textSize="9sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/spentLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignBaseline="@id/spentText"
+            android:layout_toEndOf="@id/spentText"
+            android:layout_marginStart="2dp"
+            android:text="spent"
+            android:textColor="#666666"
+            android:textSize="7sp" />
+
+        <!-- Refresh Button - properly aligned -->
+        <ImageView
+            android:id="@+id/refreshButton"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:layout_alignParentEnd="true"
+            android:layout_centerVertical="true"
+            android:src="@drawable/ic_refresh_small"
+            android:contentDescription="Refresh" />
+    </RelativeLayout>
+</RelativeLayout>

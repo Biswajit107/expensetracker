@@ -50,16 +50,19 @@
         </receiver>
 
         <!-- Widget Provider Declaration -->
+        <!-- Add this receiver to your AndroidManifest.xml file within the <application> tag -->
+
         <receiver
-            android:name=".widget.ModernExpenseWidgetProvider"
+            android:name=".widget.BudgetCompactBlueWidgetProvider"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.example.expensetracker.widget.UPDATE_WIDGET" />
+                <action android:name="com.example.expensetracker.widget.UPDATE_COMPACT_BLUE_WIDGET" />
+                <action android:name="com.example.expensetracker.widget.REFRESH_COMPACT_BLUE_WIDGET" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/modern_expense_widget_info" />
+                android:resource="@xml/budget_compact_blue_widget_info" />
         </receiver>
 
 

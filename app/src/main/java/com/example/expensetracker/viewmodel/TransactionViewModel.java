@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 
 import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.repository.TransactionRepository;
+import com.example.expensetracker.utils.PreferencesManager;
 
 public class TransactionViewModel extends AndroidViewModel {
     private TransactionRepository repository;
@@ -23,6 +24,7 @@ public class TransactionViewModel extends AndroidViewModel {
     private LiveData<List<Transaction>> allTransactions;
     private MutableLiveData<Boolean> transactionUpdated = new MutableLiveData<>(false);
     private ExecutorService executorService;
+    private PreferencesManager preferencesManager;
 
     public TransactionViewModel(Application application) {
         super(application);
@@ -30,6 +32,15 @@ public class TransactionViewModel extends AndroidViewModel {
         budget = new MutableLiveData<>(0.0);
         allTransactions = repository.getAllTransactions();
         executorService = Executors.newSingleThreadExecutor();
+
+        // Initialize PreferencesManager
+        preferencesManager = new PreferencesManager(application);
+
+        // Load saved budget, if any
+        if (preferencesManager.hasBudgetAmount()) {
+            double savedBudget = preferencesManager.getBudgetAmount(0.0);
+            budget.setValue(savedBudget);
+        }
     }
 
     public LiveData<List<Transaction>> getAllTransactions() {
@@ -38,6 +49,9 @@ public class TransactionViewModel extends AndroidViewModel {
 
     public void setBudget(double amount) {
         budget.setValue(amount);
+
+        // Save budget to SharedPreferences
+        preferencesManager.saveBudgetAmount(amount);
     }
 
     public LiveData<Double> getBudget() {

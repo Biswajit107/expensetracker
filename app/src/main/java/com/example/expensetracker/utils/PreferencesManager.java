@@ -10,6 +10,8 @@ public class PreferencesManager {
 
     private static final String KEY_GROUPING_MODE = "grouping_mode";
 
+    private static final String KEY_BUDGET_AMOUNT = "budget_amount";
+
     private SharedPreferences prefs;
 
     public PreferencesManager(Context context) {
@@ -68,5 +70,37 @@ public class PreferencesManager {
      */
     public int getGroupingModePreference() {
         return prefs.getInt(KEY_GROUPING_MODE, 0); // Default to day grouping
+    }
+
+    /**
+     * Save budget amount to persistent storage
+     * @param amount Budget amount to save
+     */
+    public void saveBudgetAmount(double amount) {
+        prefs.edit().putFloat(KEY_BUDGET_AMOUNT, (float) amount).apply();
+    }
+
+    /**
+     * Get saved budget amount
+     * @param defaultAmount Default amount to return if no budget has been saved
+     * @return The saved budget amount or defaultAmount if none exists
+     */
+    public double getBudgetAmount(double defaultAmount) {
+        return prefs.getFloat(KEY_BUDGET_AMOUNT, (float) defaultAmount);
+    }
+
+    /**
+     * Check if a budget amount has been saved
+     * @return true if budget has been set, false otherwise
+     */
+    public boolean hasBudgetAmount() {
+        return prefs.contains(KEY_BUDGET_AMOUNT);
+    }
+
+    /**
+     * Clear saved budget amount
+     */
+    public void clearBudgetAmount() {
+        prefs.edit().remove(KEY_BUDGET_AMOUNT).apply();
     }
 }
