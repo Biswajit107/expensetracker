@@ -252,11 +252,38 @@ public class MainActivity extends AppCompatActivity {
         // Setup clear filter button
         if (clearFilterButton != null) {
             clearFilterButton.setOnClickListener(v -> {
-                // Reset and show all transactions
-                updateTransactionsList();
+                // Clear the filter state
+                currentFilterState.viewingManuallyExcluded = false;
+                currentFilterState.searchQuery = "";
+                currentFilterState.category = null;
+                currentFilterState.bank = "All Banks";
+                currentFilterState.type = "All Types";
 
-                // Hide filter UI
-                filterIndicatorContainer.setVisibility(View.GONE);
+                // Hide the filter indicator
+                if (filterIndicatorContainer != null) {
+                    filterIndicatorContainer.setVisibility(View.GONE);
+                }
+
+                // Uncheck the category filter chips
+                ChipGroup categoryFilterChipGroup = findViewById(R.id.categoryFilterChipGroup);
+                if (categoryFilterChipGroup != null) {
+                    categoryFilterChipGroup.clearCheck();
+                }
+
+                // Clear search box
+                EditText searchInput = findViewById(R.id.searchInput);
+                if (searchInput != null) {
+                    searchInput.setText("");
+                }
+
+                // Reload transactions without filter
+                if (smartLoadingStrategy != null) {
+                    smartLoadingStrategy.updateFilterState(currentFilterState);
+                    smartLoadingStrategy.refreshData(fromDate, toDate);
+                } else {
+                    // Reset pagination and reload all transactions
+                    resetPagination();
+                }
             });
         }
     }
@@ -517,7 +544,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // Update the summary
-        updateSummary(filteredList);
+        updateSummaryWithBudget(filteredList, viewModel.getBudget().getValue());
 
         // Show a confirmation
         Toast.makeText(this, "Transaction updated", Toast.LENGTH_SHORT).show();
@@ -602,7 +629,7 @@ public class MainActivity extends AppCompatActivity {
                     allTransactions.addAll(finalNextPageTransactions);
 
                     // Update summary with all transactions
-                    updateSummary(allTransactions);
+                    updateSummaryWithBudget(allTransactions, viewModel.getBudget().getValue());
 
                     // Update empty state view
                     if (emptyStateText != null) {
@@ -645,7 +672,7 @@ public class MainActivity extends AppCompatActivity {
 
         setupSpendingChart();
 
-        updateSummary(adapter.getTransactions());
+        updateSummaryWithBudget(adapter.getTransactions(), viewModel.getBudget().getValue());
 
     }
 
@@ -670,25 +697,41 @@ public class MainActivity extends AppCompatActivity {
         // Update filter state
         currentFilterState.searchQuery = query;
 
-        // Apply filters to allTransactions
-        List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
+        // If we're using smart loading strategy
+        if (smartLoadingStrategy != null) {
+            // Update the smart loading strategy with the new filter state
+            smartLoadingStrategy.updateFilterState(currentFilterState);
 
-        // Update adapter
-        adapter.setTransactions(filteredTransactions);
+            // Reload data with the new filter - this is likely asynchronous
+            smartLoadingStrategy.refreshData(fromDate, toDate);
 
-        // Update filter indicator
-        if (filterIndicatorContainer != null) {
-            if (!query.isEmpty()) {
-                filterIndicatorContainer.setVisibility(View.VISIBLE);
-                filterIndicator.setText("Search: " + query);
+            // Update filter indicator UI immediately
+            updateFilterIndicatorUI(query);
+        } else {
+            // For non-smart loading strategy, apply filters manually
+            List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
+            adapter.setTransactions(filteredTransactions);
 
-                if (resultCount != null) {
-                    resultCount.setText(String.format(Locale.getDefault(),
-                            "%d transaction(s) found", filteredTransactions.size()));
-                }
-            } else if (!currentFilterState.isAnyFilterActive()) {
-                filterIndicatorContainer.setVisibility(View.GONE);
+            // Update filter indicator UI
+            updateFilterIndicatorUI(query);
+
+            // Update result count text
+            if (resultCount != null) {
+                resultCount.setText(String.format(Locale.getDefault(),
+                        "%d transaction(s) found", filteredTransactions.size()));
             }
+        }
+    }
+
+    // Helper method to update filter indicator UI
+    private void updateFilterIndicatorUI(String query) {
+        if (filterIndicatorContainer == null) return;
+
+        if (query != null && !query.isEmpty()) {
+            filterIndicatorContainer.setVisibility(View.VISIBLE);
+            filterIndicator.setText("Search: " + query);
+        } else if (!currentFilterState.isAnyFilterActive()) {
+            filterIndicatorContainer.setVisibility(View.GONE);
         }
     }
 
@@ -814,7 +857,20 @@ public class MainActivity extends AppCompatActivity {
             if (checkedId == View.NO_ID) {
                 // No chip selected, show all categories
                 currentFilterState.viewingManuallyExcluded = false;
-                resetPagination();
+                currentFilterState.category = null;
+
+                // Hide filter indicator
+                if (filterIndicatorContainer != null) {
+                    filterIndicatorContainer.setVisibility(View.GONE);
+                }
+
+                // Reload data without filters - this is important for both view modes
+                if (smartLoadingStrategy != null) {
+                    smartLoadingStrategy.updateFilterState(currentFilterState);
+                    smartLoadingStrategy.refreshData(fromDate, toDate);
+                } else {
+                    resetPagination();
+                }
                 return;
             }
 
@@ -843,6 +899,21 @@ public class MainActivity extends AppCompatActivity {
     private void loadManuallyExcludedTransactions() {
         // Update filter state
         currentFilterState.viewingManuallyExcluded = true;
+
+        // Update filter indicator UI immediately
+        if (filterIndicatorContainer != null) {
+            filterIndicatorContainer.setVisibility(View.VISIBLE);
+            filterIndicator.setText("Viewing: Manually Excluded Transactions");
+        }
+
+        // Use the smart loading strategy if available
+        if (smartLoadingStrategy != null) {
+            // Update the strategy with our new filter state
+            smartLoadingStrategy.updateFilterState(currentFilterState);
+            // Force a reload of data with the new filter state
+            smartLoadingStrategy.refreshData(fromDate, toDate);
+            return;
+        }
 
         // Clear existing data
         adapter.clearTransactions();
@@ -917,7 +988,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Update adapter and UI
         adapter.setTransactions(filteredTransactions);
-        updateSummary(filteredTransactions);
+        updateSummaryWithBudget(filteredTransactions, viewModel.getBudget().getValue());
 
         // Show filter indicator
         if (filterIndicatorContainer != null) {
@@ -1601,15 +1672,23 @@ public class MainActivity extends AppCompatActivity {
         currentFilterState.maxAmount = maxAmount;
         currentFilterState.showingExcluded = showExcluded;
 
-        // If excluded state changed, we need to reload data from database
-        if (excludedStateChanged) {
-            // Reset pagination and reload
-            resetPagination();
+        // This is the critical part - update the smart loading strategy with our new filter state
+        if (smartLoadingStrategy != null) {
+            smartLoadingStrategy.updateFilterState(currentFilterState);
+
+            // Force a refresh of the data with new filters
+            smartLoadingStrategy.refreshData(fromDate, toDate);
         } else {
-            // Just apply filters to existing data
-            List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
-            adapter.setTransactions(filteredTransactions);
-            updateSummary(filteredTransactions);
+            // If excluded state changed, we need to reload data from database
+            if (excludedStateChanged) {
+                // Reset pagination and reload
+                resetPagination();
+            } else {
+                // Just apply filters to existing data
+                List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
+                adapter.setTransactions(filteredTransactions);
+                updateSummaryWithBudget(filteredTransactions, viewModel.getBudget().getValue());
+            }
         }
 
         // Show filter indicator
@@ -1692,7 +1771,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             adapter.setTransactions(transactions);
-            updateSummary(transactions);
+            updateSummaryWithBudget(transactions, viewModel.getBudget().getValue());
 
             // Save all transactions for search filtering
             allTransactions = new ArrayList<>(transactions);
@@ -1729,7 +1808,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void updateSummaryWithBudget(List<Transaction> transactions, double budget) {
+    public void updateSummaryWithBudget(List<Transaction> transactions, double budget) {
         // Calculate total debits
         double totalDebits = 0;
         double totalCredits = 0;

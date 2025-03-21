@@ -9,6 +9,7 @@ import android.widget.Toast;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.expensetracker.MainActivity;
+import com.example.expensetracker.R;
 import com.example.expensetracker.adapters.DateGroupedTransactionAdapter;
 import com.example.expensetracker.adapters.TransactionAdapter;
 import com.example.expensetracker.database.TransactionDao;
@@ -18,6 +19,7 @@ import com.example.expensetracker.models.Transaction;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 
 /**
@@ -359,7 +361,10 @@ public class SmartLoadingStrategy {
 
                             // Update summary in MainActivity
                             if (context instanceof MainActivity) {
-                                ((MainActivity) context).updateSummary(finalTransactions);
+                                // Get budget value from MainActivity or PreferencesManager
+                                PreferencesManager preferencesManager = new PreferencesManager(context);
+                                double budget = preferencesManager.getBudgetAmount(0.0);
+                                ((MainActivity) context).updateSummaryWithBudget(finalTransactions, budget);
                             }
 
                             // Hide empty state
@@ -433,7 +438,10 @@ public class SmartLoadingStrategy {
 
                             // Update summary in MainActivity
                             if (context instanceof MainActivity) {
-                                ((MainActivity) context).updateSummary(finalTransactions);
+                                // Get budget value from MainActivity or PreferencesManager
+                                PreferencesManager preferencesManager = new PreferencesManager(context);
+                                double budget = preferencesManager.getBudgetAmount(0.0);
+                                ((MainActivity) context).updateSummaryWithBudget(finalTransactions, budget);
                             }
 
                             // Hide empty state
@@ -469,6 +477,65 @@ public class SmartLoadingStrategy {
                 }
             }
         });
+    }
+
+    // Add this method to SmartLoadingStrategy.java
+    private void updateFilterIndicator(List<Transaction> transactions) {
+        if (context instanceof MainActivity) {
+            MainActivity activity = (MainActivity) context;
+            View filterContainer = activity.findViewById(R.id.filterIndicatorContainer);
+            TextView filterText = activity.findViewById(R.id.filterIndicator);
+            TextView countText = activity.findViewById(R.id.resultCount);
+
+            if (filterContainer != null && filterText != null) {
+                if (currentFilterState.viewingManuallyExcluded) {
+                    filterContainer.setVisibility(View.VISIBLE);
+                    filterText.setText("Viewing: Manually Excluded Transactions");
+
+                    if (countText != null && transactions != null) {
+                        countText.setText(String.format(Locale.getDefault(),
+                                "%d transaction(s) found", transactions.size()));
+                    }
+                } else if (currentFilterState.isAnyFilterActive()) {
+                    filterContainer.setVisibility(View.VISIBLE);
+
+                    // Build filter description
+                    StringBuilder desc = new StringBuilder("Filtered by: ");
+                    boolean hasFilter = false;
+
+                    if (!"All Banks".equals(currentFilterState.bank)) {
+                        desc.append(currentFilterState.bank);
+                        hasFilter = true;
+                    }
+
+                    if (!"All Types".equals(currentFilterState.type)) {
+                        if (hasFilter) desc.append(", ");
+                        desc.append(currentFilterState.type);
+                        hasFilter = true;
+                    }
+
+                    if (currentFilterState.category != null && !currentFilterState.category.isEmpty()) {
+                        if (hasFilter) desc.append(", ");
+                        desc.append(currentFilterState.category);
+                        hasFilter = true;
+                    }
+
+                    if (!currentFilterState.searchQuery.isEmpty()) {
+                        if (hasFilter) desc.append(", ");
+                        desc.append("Search: ").append(currentFilterState.searchQuery);
+                    }
+
+                    filterText.setText(desc.toString());
+
+                    if (countText != null && transactions != null) {
+                        countText.setText(String.format(Locale.getDefault(),
+                                "%d transaction(s) found", transactions.size()));
+                    }
+                } else {
+                    filterContainer.setVisibility(View.GONE);
+                }
+            }
+        }
     }
 
 
