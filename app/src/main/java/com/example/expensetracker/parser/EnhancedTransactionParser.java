@@ -3,7 +3,6 @@ package com.example.expensetracker.parser;
 import android.util.Base64;
 import android.util.Log;
 
-import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.models.Transaction;
 
 import java.nio.charset.StandardCharsets;

@@ -5,11 +5,9 @@ import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.MutableLiveData;
 import androidx.sqlite.db.SupportSQLiteQuery;
 
-import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.database.TransactionDatabase;
 import com.example.expensetracker.database.TransactionSearchFilter;
 import com.example.expensetracker.models.Transaction;
-import com.example.expensetracker.repository.TransactionRepository;
 
 import java.util.ArrayList;
 import java.util.Arrays;

@@ -6,7 +6,6 @@ import androidx.room.Insert;
 import androidx.room.Query;
 import androidx.room.RawQuery;
 import androidx.room.Update;
-import androidx.room.Delete;
 import androidx.sqlite.db.SupportSQLiteQuery;
 
 import com.example.expensetracker.models.Transaction;

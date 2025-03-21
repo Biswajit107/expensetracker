@@ -19,7 +19,6 @@ import com.example.expensetracker.utils.PreferencesManager;
 import com.example.expensetracker.utils.TransactionDuplicateDetector;
 
 import java.util.Date;
-import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;

@@ -1,8 +1,6 @@
 package com.example.expensetracker.viewmodel;
 
 import android.app.Application;
-import android.content.Context;
-import android.widget.Toast;
 
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
