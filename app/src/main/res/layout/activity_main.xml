@@ -347,40 +347,77 @@
                 android:orientation="horizontal"
                 android:layout_margin="16dp">
 
-                <!-- Search Bar -->
-                <com.google.android.material.card.MaterialCardView
+                <!-- Collapsible Search Container -->
+                <FrameLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    app:cardCornerRadius="8dp"
-                    app:cardElevation="1dp">
+                    android:layout_weight="1">
 
+                    <!-- Collapsed Search Icon (Initially Visible) -->
                     <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:id="@+id/collapsedSearchView"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:background="@drawable/search_background"
                         android:orientation="horizontal"
-                        android:gravity="center_vertical">
+                        android:gravity="center_vertical"
+                        android:paddingHorizontal="12dp"
+                        android:elevation="1dp">
 
                         <ImageView
+                            android:id="@+id/searchIcon"
                             android:layout_width="24dp"
                             android:layout_height="24dp"
-                            android:layout_margin="8dp"
-                            android:src="@drawable/ic_search"/>
-
-                        <EditText
-                            android:id="@+id/searchInput"
-                            android:layout_width="0dp"
-                            android:layout_height="40dp"
-                            android:layout_weight="1"
-                            android:background="@null"
-                            android:hint="Search"
-                            android:inputType="text"
-                            android:singleLine="true"
-                            android:imeOptions="actionSearch"
-                            android:padding="8dp"/>
+                            android:src="@drawable/ic_search"
+                            android:contentDescription="Search"/>
                     </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
 
+                    <!-- Expanded Search Bar (Initially Hidden) -->
+                    <com.google.android.material.card.MaterialCardView
+                        android:id="@+id/expandedSearchView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:cardCornerRadius="8dp"
+                        app:cardElevation="1dp"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical">
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:layout_margin="8dp"
+                                android:src="@drawable/ic_search"/>
+
+                            <EditText
+                                android:id="@+id/searchInput"
+                                android:layout_width="0dp"
+                                android:layout_height="48dp"
+                                android:layout_weight="1"
+                                android:background="@null"
+                                android:hint="Search"
+                                android:inputType="text"
+                                android:singleLine="true"
+                                android:imeOptions="actionSearch"
+                                android:padding="8dp"/>
+
+                            <ImageButton
+                                android:id="@+id/clearSearchButton"
+                                android:layout_width="40dp"
+                                android:layout_height="40dp"
+                                android:src="@drawable/ic_close"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:contentDescription="Clear"
+                                android:visibility="gone"/>
+                        </LinearLayout>
+                    </com.google.android.material.card.MaterialCardView>
+                </FrameLayout>
+
+                <!-- View Mode Button -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/viewModeButton"
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton.Icon"
