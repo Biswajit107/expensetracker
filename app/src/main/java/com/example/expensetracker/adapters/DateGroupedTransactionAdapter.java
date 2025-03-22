@@ -56,10 +56,7 @@ public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGrou
         notifyDataSetChanged();
     }
 
-    /**
-     * Set the transactions and group them according to the specified mode
-     */
-    public void setTransactions(List<Transaction> transactions, int groupingMode) {
+    public void setTransactions(List<Transaction> transactions, int groupingMode, int sortOption) {
         this.currentGroupingMode = groupingMode;
 
         if (transactions == null || transactions.isEmpty()) {
@@ -69,20 +66,94 @@ public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGrou
         }
 
         // Create groups based on the grouping mode
+        List<DateGroup> newGroups;
         switch (groupingMode) {
             case GROUP_BY_WEEK:
-                dateGroups = groupTransactionsByWeek(transactions);
+                newGroups = groupTransactionsByWeek(transactions);
                 break;
             case GROUP_BY_MONTH:
-                dateGroups = groupTransactionsByMonth(transactions);
+                newGroups = groupTransactionsByMonth(transactions);
                 break;
             case GROUP_BY_DAY:
             default:
-                dateGroups = groupTransactionsByDay(transactions);
+                newGroups = groupTransactionsByDay(transactions);
                 break;
         }
 
+        // For each group, apply sorting to its transactions
+        for (DateGroup group : newGroups) {
+            sortTransactionsInGroup(group, sortOption);
+        }
+
+        // Now sort the groups themselves if needed (based on sort option)
+        if (sortOption != 0) { // If not default sort (newest date first)
+            sortGroups(newGroups, sortOption);
+        }
+
+        dateGroups = newGroups;
         notifyDataSetChanged();
+    }
+
+    // Add this helper method to sort transactions within a group
+    private void sortTransactionsInGroup(DateGroup group, int sortOption) {
+        List<Transaction> transactions = group.getTransactions();
+
+        switch (sortOption) {
+            case 0: // Date (newest first)
+                Collections.sort(transactions, (a, b) -> Long.compare(b.getDate(), a.getDate()));
+                break;
+            case 1: // Date (oldest first)
+                Collections.sort(transactions, (a, b) -> Long.compare(a.getDate(), b.getDate()));
+                break;
+            case 2: // Amount (highest first)
+                Collections.sort(transactions, (a, b) -> Double.compare(b.getAmount(), a.getAmount()));
+                break;
+            case 3: // Amount (lowest first)
+                Collections.sort(transactions, (a, b) -> Double.compare(a.getAmount(), b.getAmount()));
+                break;
+            case 4: // Description (A-Z)
+                Collections.sort(transactions, (a, b) -> {
+                    String descA = a.getDescription() != null ? a.getDescription() : "";
+                    String descB = b.getDescription() != null ? b.getDescription() : "";
+                    return descA.compareToIgnoreCase(descB);
+                });
+                break;
+            case 5: // Description (Z-A)
+                Collections.sort(transactions, (a, b) -> {
+                    String descA = a.getDescription() != null ? a.getDescription() : "";
+                    String descB = b.getDescription() != null ? b.getDescription() : "";
+                    return descB.compareToIgnoreCase(descA);
+                });
+                break;
+        }
+    }
+
+    // Add this helper method to sort the groups themselves
+    private void sortGroups(List<DateGroup> groups, int sortOption) {
+        switch (sortOption) {
+            case 1: // Date (oldest first) - reverse the default group order
+                Collections.reverse(groups);
+                break;
+            case 2: // Amount (highest first)
+                Collections.sort(groups, (a, b) -> Double.compare(b.getTotalAmount(), a.getTotalAmount()));
+                break;
+            case 3: // Amount (lowest first)
+                Collections.sort(groups, (a, b) -> Double.compare(a.getTotalAmount(), b.getTotalAmount()));
+                break;
+            case 4: // Description (A-Z) - sort by group name
+                Collections.sort(groups, (a, b) -> a.getLabel().compareToIgnoreCase(b.getLabel()));
+                break;
+            case 5: // Description (Z-A) - sort by group name reversed
+                Collections.sort(groups, (a, b) -> b.getLabel().compareToIgnoreCase(a.getLabel()));
+                break;
+            // Default case (0) is already sorted by date newest first
+        }
+    }
+
+    // Add this method to maintain compatibility with existing calls
+    public void setTransactions(List<Transaction> transactions, int groupingMode) {
+        // Default to sort option 0 (Date newest first)
+        setTransactions(transactions, groupingMode, 0);
     }
 
     /**

@@ -12,6 +12,11 @@ public class PreferencesManager {
 
     private static final String KEY_BUDGET_AMOUNT = "budget_amount";
 
+    // Add these to PreferencesManager.java
+    private static final String KEY_SORT_OPTION = "sort_option";
+
+
+
     private SharedPreferences prefs;
 
     public PreferencesManager(Context context) {
@@ -103,4 +108,22 @@ public class PreferencesManager {
     public void clearBudgetAmount() {
         prefs.edit().remove(KEY_BUDGET_AMOUNT).apply();
     }
+
+    /**
+     * Save user's preference for transaction sorting
+     * @param sortOption The sort option (0-5)
+     */
+    public void saveSortOption(int sortOption) {
+        prefs.edit().putInt(KEY_SORT_OPTION, sortOption).apply();
+    }
+
+    /**
+     * Get user's preference for transaction sorting
+     * @return The sort option (0 = Date newest first by default)
+     */
+    public int getSortOption() {
+        return prefs.getInt(KEY_SORT_OPTION, 0); // Default to date newest first
+    }
+
+
 }

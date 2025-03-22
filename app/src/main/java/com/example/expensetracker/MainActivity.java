@@ -148,6 +148,15 @@ public class MainActivity extends AppCompatActivity {
         boolean preferGroupedView = preferencesManager.getViewModePreference();
         int groupingMode = preferencesManager.getGroupingModePreference();
 
+        // Restore saved sort option
+        int savedSortOption = preferencesManager.getSortOption();
+        currentFilterState.sortOption = savedSortOption;
+
+        // If non-default sort is applied, update the UI
+        if (savedSortOption != 0) {
+            updateSortIndicator(savedSortOption);
+        }
+
         if (preferGroupedView) {
             switch (groupingMode) {
                 case 1:
@@ -240,6 +249,9 @@ public class MainActivity extends AppCompatActivity {
             clearFilterButton.setOnClickListener(v -> {
                 // Reset filter state
                 currentFilterState = new FilterState();
+
+                // Reset sort in preferences
+                preferencesManager.saveSortOption(0);
 
                 // Hide filter indicator
                 if (filterIndicatorContainer != null) {
@@ -575,11 +587,59 @@ public class MainActivity extends AppCompatActivity {
     private void sortTransactions(int sortOption) {
         // Update filter state
         currentFilterState.sortOption = sortOption;
+        // Save sort preference
+        preferencesManager.saveSortOption(sortOption);
+
+        // Update filter indicator to show current sort
+        updateSortIndicator(sortOption);
 
         // Use smart loading strategy to apply sort
         if (smartLoadingStrategy != null) {
             smartLoadingStrategy.updateFilterState(currentFilterState);
             smartLoadingStrategy.refreshData(fromDate, toDate);
+        }
+    }
+
+    // New method to update UI with current sort
+    private void updateSortIndicator(int sortOption) {
+        if (filterIndicatorContainer == null || filterIndicator == null) {
+            return;
+        }
+
+        String sortText = "Sorted by: ";
+        switch (sortOption) {
+            case 0:
+                sortText += "Date (newest first)";
+                break;
+            case 1:
+                sortText += "Date (oldest first)";
+                break;
+            case 2:
+                sortText += "Amount (highest first)";
+                break;
+            case 3:
+                sortText += "Amount (lowest first)";
+                break;
+            case 4:
+                sortText += "Description (A-Z)";
+                break;
+            case 5:
+                sortText += "Description (Z-A)";
+                break;
+        }
+
+        // If no other filters, update indicator with just sort
+        if (!currentFilterState.isAnyFilterActive() ||
+                (currentFilterState.isAnyFilterActive() &&
+                        currentFilterState.sortOption != 0)) {
+            filterIndicatorContainer.setVisibility(View.VISIBLE);
+            filterIndicator.setText(sortText);
+        } else if (currentFilterState.isAnyFilterActive()) {
+            // If other filters exist, append sort info
+            String currentText = filterIndicator.getText().toString();
+            if (!currentText.contains("Sorted by")) {
+                filterIndicator.setText(currentText + ", " + sortText);
+            }
         }
     }
 
@@ -1658,12 +1718,14 @@ public class MainActivity extends AppCompatActivity {
         boolean wasViewingManuallyExcluded = currentFilterState.viewingManuallyExcluded;
         String currentCategory = currentFilterState.category;
         String currentSearch = currentFilterState.searchQuery;
+        int currentSortOption = currentFilterState.sortOption;
 
         // Create new filter state with preserved values
         FilterState newFilterState = new FilterState();
         newFilterState.viewingManuallyExcluded = wasViewingManuallyExcluded;
         newFilterState.category = currentCategory;
         newFilterState.searchQuery = currentSearch;
+        newFilterState.sortOption = currentSortOption;
 
         // Update current filter state
         currentFilterState = newFilterState;

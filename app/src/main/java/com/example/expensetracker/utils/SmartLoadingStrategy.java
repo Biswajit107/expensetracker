@@ -357,7 +357,7 @@ public class SmartLoadingStrategy {
 
                         if (finalTransactions != null && !finalTransactions.isEmpty()) {
                             // Group transactions and update adapter with the grouping mode
-                            groupedAdapter.setTransactions(finalTransactions, groupingMode);
+                            groupedAdapter.setTransactions(finalTransactions, groupingMode, currentFilterState.sortOption);
 
                             // Update summary in MainActivity
                             if (context instanceof MainActivity) {
@@ -378,7 +378,7 @@ public class SmartLoadingStrategy {
                             }
 
                             // Clear the adapter
-                            groupedAdapter.setTransactions(new ArrayList<>(), groupingMode);
+                            groupedAdapter.setTransactions(new ArrayList<>(), groupingMode, currentFilterState.sortOption);
                         }
 
                         isLoading = false;
