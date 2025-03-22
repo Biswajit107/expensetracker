@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.example.expensetracker.R;
 import com.example.expensetracker.models.Transaction;
 
+import java.text.NumberFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -25,9 +26,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
- * Adapter for displaying transactions grouped by date with configurable grouping level
+ * Adapter for displaying transactions grouped by various criteria with configurable grouping level
  */
 public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGroupedTransactionAdapter.GroupViewHolder> {
     private static final String TAG = "DateGroupedAdapter";
@@ -36,6 +38,17 @@ public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGrou
     public static final int GROUP_BY_DAY = 0;
     public static final int GROUP_BY_WEEK = 1;
     public static final int GROUP_BY_MONTH = 2;
+    public static final int GROUP_BY_CATEGORY = 3;
+    public static final int GROUP_BY_MERCHANT = 4;
+    public static final int GROUP_BY_AMOUNT_RANGE = 5;
+    public static final int GROUP_BY_BANK = 6;
+
+    // Amount range boundaries for GROUP_BY_AMOUNT_RANGE
+    private static final double[] AMOUNT_RANGES = {0, 100, 500, 1000, 5000, 10000, Double.MAX_VALUE};
+    private static final String[] AMOUNT_RANGE_LABELS = {
+            "₹0-₹100", "₹100-₹500", "₹500-₹1,000",
+            "₹1,000-₹5,000", "₹5,000-₹10,000", "₹10,000+"
+    };
 
     private final Context context;
     private List<DateGroup> dateGroups = new ArrayList<>();
@@ -73,6 +86,18 @@ public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGrou
                 break;
             case GROUP_BY_MONTH:
                 newGroups = groupTransactionsByMonth(transactions);
+                break;
+            case GROUP_BY_CATEGORY:
+                newGroups = groupTransactionsByCategory(transactions);
+                break;
+            case GROUP_BY_MERCHANT:
+                newGroups = groupTransactionsByMerchant(transactions);
+                break;
+            case GROUP_BY_AMOUNT_RANGE:
+                newGroups = groupTransactionsByAmountRange(transactions);
+                break;
+            case GROUP_BY_BANK:
+                newGroups = groupTransactionsByBank(transactions);
                 break;
             case GROUP_BY_DAY:
             default:
@@ -361,6 +386,240 @@ public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGrou
         return groups;
     }
 
+    /**
+     * Group transactions by category
+     */
+    private List<DateGroup> groupTransactionsByCategory(List<Transaction> transactions) {
+        // Group by category
+        Map<String, List<Transaction>> groupedMap = new HashMap<>();
+
+        for (Transaction transaction : transactions) {
+            // Get category or use "Uncategorized" if not set
+            String category = transaction.getCategory();
+            if (category == null || category.isEmpty()) {
+                category = "Uncategorized";
+            }
+
+            if (!groupedMap.containsKey(category)) {
+                groupedMap.put(category, new ArrayList<>());
+            }
+
+            groupedMap.get(category).add(transaction);
+        }
+
+        // Create category groups
+        List<DateGroup> groups = new ArrayList<>();
+
+        for (Map.Entry<String, List<Transaction>> entry : groupedMap.entrySet()) {
+            // For timestamp, use the most recent transaction date in this category
+            long mostRecentTimestamp = 0;
+            for (Transaction t : entry.getValue()) {
+                if (t.getDate() > mostRecentTimestamp) {
+                    mostRecentTimestamp = t.getDate();
+                }
+            }
+
+            groups.add(new DateGroup(
+                    entry.getKey(), // Category name as label
+                    entry.getValue(),
+                    mostRecentTimestamp
+            ));
+        }
+
+        // Sort groups by total amount (highest first)
+        Collections.sort(groups, (a, b) -> Double.compare(b.getTotalAmount(), a.getTotalAmount()));
+
+        return groups;
+    }
+
+    /**
+     * Group transactions by merchant name
+     */
+    private List<DateGroup> groupTransactionsByMerchant(List<Transaction> transactions) {
+        // Group by merchant
+        Map<String, List<Transaction>> groupedMap = new HashMap<>();
+
+        for (Transaction transaction : transactions) {
+            // Get merchant name or use description if not available
+            String merchant = transaction.getMerchantName();
+            if (merchant == null || merchant.isEmpty()) {
+                // Extract a merchant-like name from description
+                merchant = extractMerchantFromDescription(transaction.getDescription());
+            }
+
+            if (!groupedMap.containsKey(merchant)) {
+                groupedMap.put(merchant, new ArrayList<>());
+            }
+
+            groupedMap.get(merchant).add(transaction);
+        }
+
+        // Create merchant groups
+        List<DateGroup> groups = new ArrayList<>();
+
+        for (Map.Entry<String, List<Transaction>> entry : groupedMap.entrySet()) {
+            // For timestamp, use the most recent transaction date for this merchant
+            long mostRecentTimestamp = 0;
+            for (Transaction t : entry.getValue()) {
+                if (t.getDate() > mostRecentTimestamp) {
+                    mostRecentTimestamp = t.getDate();
+                }
+            }
+
+            groups.add(new DateGroup(
+                    entry.getKey(), // Merchant name as label
+                    entry.getValue(),
+                    mostRecentTimestamp
+            ));
+        }
+
+        // Sort groups by total amount (highest first)
+        Collections.sort(groups, (a, b) -> Double.compare(b.getTotalAmount(), a.getTotalAmount()));
+
+        return groups;
+    }
+
+    /**
+     * Helper to extract a merchant name from a transaction description
+     */
+    private String extractMerchantFromDescription(String description) {
+        if (description == null || description.isEmpty()) {
+            return "Unknown Merchant";
+        }
+
+        // Try to extract first few words as merchant name
+        String[] words = description.split("\\s+");
+        if (words.length > 0) {
+            StringBuilder merchantBuilder = new StringBuilder();
+            // Take up to first 3 words
+            int wordCount = Math.min(3, words.length);
+            for (int i = 0; i < wordCount; i++) {
+                if (merchantBuilder.length() > 0) {
+                    merchantBuilder.append(" ");
+                }
+                merchantBuilder.append(words[i]);
+            }
+            return merchantBuilder.toString();
+        } else {
+            return "Unknown Merchant";
+        }
+    }
+
+    /**
+     * Group transactions by amount range
+     */
+    private List<DateGroup> groupTransactionsByAmountRange(List<Transaction> transactions) {
+        // Create a map to hold transactions for each amount range
+        Map<Integer, List<Transaction>> groupedMap = new HashMap<>();
+
+        // Initialize all range groups
+        for (int i = 0; i < AMOUNT_RANGES.length - 1; i++) {
+            groupedMap.put(i, new ArrayList<>());
+        }
+
+        // Group transactions by amount range
+        for (Transaction transaction : transactions) {
+            double amount = transaction.getAmount();
+
+            // Find which range this transaction belongs to
+            for (int i = 0; i < AMOUNT_RANGES.length - 1; i++) {
+                if (amount >= AMOUNT_RANGES[i] && amount < AMOUNT_RANGES[i + 1]) {
+                    groupedMap.get(i).add(transaction);
+                    break;
+                }
+            }
+        }
+
+        // Create amount range groups
+        List<DateGroup> groups = new ArrayList<>();
+
+        for (int i = 0; i < AMOUNT_RANGES.length - 1; i++) {
+            List<Transaction> rangeTransactions = groupedMap.get(i);
+
+            // Skip empty ranges
+            if (rangeTransactions.isEmpty()) {
+                continue;
+            }
+
+            // For timestamp, use the most recent transaction date in this range
+            long mostRecentTimestamp = 0;
+            for (Transaction t : rangeTransactions) {
+                if (t.getDate() > mostRecentTimestamp) {
+                    mostRecentTimestamp = t.getDate();
+                }
+            }
+
+            groups.add(new DateGroup(
+                    AMOUNT_RANGE_LABELS[i], // Range label
+                    rangeTransactions,
+                    mostRecentTimestamp
+            ));
+        }
+
+        // Sort groups by amount range (ascending)
+        Collections.sort(groups, (a, b) -> {
+            // Find index of the range labels
+            int indexA = -1;
+            int indexB = -1;
+            for (int i = 0; i < AMOUNT_RANGE_LABELS.length; i++) {
+                if (AMOUNT_RANGE_LABELS[i].equals(a.getLabel())) {
+                    indexA = i;
+                }
+                if (AMOUNT_RANGE_LABELS[i].equals(b.getLabel())) {
+                    indexB = i;
+                }
+            }
+            return Integer.compare(indexA, indexB);
+        });
+
+        return groups;
+    }
+
+    /**
+     * Group transactions by bank
+     */
+    private List<DateGroup> groupTransactionsByBank(List<Transaction> transactions) {
+        // Group by bank
+        Map<String, List<Transaction>> groupedMap = new HashMap<>();
+
+        for (Transaction transaction : transactions) {
+            String bank = transaction.getBank();
+            if (bank == null || bank.isEmpty()) {
+                bank = "Unknown Bank";
+            }
+
+            if (!groupedMap.containsKey(bank)) {
+                groupedMap.put(bank, new ArrayList<>());
+            }
+
+            groupedMap.get(bank).add(transaction);
+        }
+
+        // Create bank groups
+        List<DateGroup> groups = new ArrayList<>();
+
+        for (Map.Entry<String, List<Transaction>> entry : groupedMap.entrySet()) {
+            // For timestamp, use the most recent transaction date for this bank
+            long mostRecentTimestamp = 0;
+            for (Transaction t : entry.getValue()) {
+                if (t.getDate() > mostRecentTimestamp) {
+                    mostRecentTimestamp = t.getDate();
+                }
+            }
+
+            groups.add(new DateGroup(
+                    entry.getKey(), // Bank name as label
+                    entry.getValue(),
+                    mostRecentTimestamp
+            ));
+        }
+
+        // Sort groups by total amount (highest first)
+        Collections.sort(groups, (a, b) -> Double.compare(b.getTotalAmount(), a.getTotalAmount()));
+
+        return groups;
+    }
+
     @NonNull
     @Override
     public GroupViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -509,10 +768,12 @@ public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGrou
         public double getTotalAmount() {
             double totalAmount = 0;
             for (Transaction transaction : transactions) {
-                if (transaction.isDebit()) {
-                    totalAmount += transaction.getAmount();
-                } else {
-                    totalAmount -= transaction.getAmount();
+                if (!transaction.isExcludedFromTotal()) {
+                    if (transaction.isDebit()) {
+                        totalAmount += transaction.getAmount();
+                    } else {
+                        totalAmount -= transaction.getAmount();
+                    }
                 }
             }
             return totalAmount;

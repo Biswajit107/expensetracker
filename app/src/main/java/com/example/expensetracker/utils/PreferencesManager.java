@@ -15,7 +15,8 @@ public class PreferencesManager {
     // Add these to PreferencesManager.java
     private static final String KEY_SORT_OPTION = "sort_option";
 
-
+    private static final String KEY_FROM_DATE = "from_date";
+    private static final String KEY_TO_DATE = "to_date";
 
     private SharedPreferences prefs;
 
@@ -26,9 +27,6 @@ public class PreferencesManager {
     public void setLastSyncTime(long timestamp) {
         prefs.edit().putLong(KEY_LAST_SYNC, timestamp).apply();
     }
-
-    private static final String KEY_FROM_DATE = "from_date";
-    private static final String KEY_TO_DATE = "to_date";
 
     public void saveSelectedDateRange(long fromDate, long toDate) {
         prefs.edit()
@@ -63,7 +61,8 @@ public class PreferencesManager {
 
     /**
      * Save user's preference for grouping mode
-     * @param groupingMode The grouping mode (0 = Day, 1 = Week, 2 = Month)
+     * @param groupingMode The grouping mode (0 = Day, 1 = Week, 2 = Month,
+     *                     3 = Category, 4 = Merchant, 5 = Amount Range, 6 = Bank)
      */
     public void saveGroupingMode(int groupingMode) {
         prefs.edit().putInt(KEY_GROUPING_MODE, groupingMode).apply();
@@ -71,7 +70,7 @@ public class PreferencesManager {
 
     /**
      * Get user's preference for grouping mode
-     * @return The grouping mode (0 = Day, 1 = Week, 2 = Month)
+     * @return The grouping mode (0 = Day by default)
      */
     public int getGroupingModePreference() {
         return prefs.getInt(KEY_GROUPING_MODE, 0); // Default to day grouping
@@ -124,6 +123,4 @@ public class PreferencesManager {
     public int getSortOption() {
         return prefs.getInt(KEY_SORT_OPTION, 0); // Default to date newest first
     }
-
-
 }

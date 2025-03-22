@@ -34,6 +34,7 @@ import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.example.expensetracker.adapters.DateGroupedTransactionAdapter;
 import com.example.expensetracker.adapters.TransactionAdapter;
 import com.example.expensetracker.database.TransactionDatabase;
 import com.example.expensetracker.dialogs.TransactionEditDialog;
@@ -107,10 +108,14 @@ public class MainActivity extends AppCompatActivity {
     private ViewMode currentViewMode = ViewMode.LIST; // Default to list mode
 
     private enum ViewMode {
-        LIST,           // Individual transactions with pagination
-        GROUP_BY_DAY,   // Grouped by day (current implementation)
-        GROUP_BY_WEEK,  // Grouped by week
-        GROUP_BY_MONTH  // Grouped by month
+        LIST,              // Individual transactions with pagination
+        GROUP_BY_DAY,      // Grouped by day
+        GROUP_BY_WEEK,     // Grouped by week
+        GROUP_BY_MONTH,    // Grouped by month
+        GROUP_BY_CATEGORY, // Grouped by expense category
+        GROUP_BY_MERCHANT, // Grouped by merchant/vendor
+        GROUP_BY_AMOUNT_RANGE, // Grouped by amount ranges
+        GROUP_BY_BANK      // Grouped by bank
     }
 
     @Override
@@ -342,6 +347,18 @@ public class MainActivity extends AppCompatActivity {
             case GROUP_BY_MONTH:
                 menu.findItem(R.id.menu_month_view).setChecked(true);
                 break;
+            case GROUP_BY_CATEGORY:
+                menu.findItem(R.id.menu_category_view).setChecked(true);
+                break;
+            case GROUP_BY_MERCHANT:
+                menu.findItem(R.id.menu_merchant_view).setChecked(true);
+                break;
+            case GROUP_BY_AMOUNT_RANGE:
+                menu.findItem(R.id.menu_amount_view).setChecked(true);
+                break;
+            case GROUP_BY_BANK:
+                menu.findItem(R.id.menu_bank_view).setChecked(true);
+                break;
         }
 
         // Set click listener for menu items
@@ -357,18 +374,38 @@ public class MainActivity extends AppCompatActivity {
                     return true;
 
                 case R.id.menu_day_view:
-                    groupingMode = 0; // Day grouping
+                    groupingMode = DateGroupedTransactionAdapter.GROUP_BY_DAY;
                     newViewMode = ViewMode.GROUP_BY_DAY;
                     break;
 
                 case R.id.menu_week_view:
-                    groupingMode = 1; // Week grouping
+                    groupingMode = DateGroupedTransactionAdapter.GROUP_BY_WEEK;
                     newViewMode = ViewMode.GROUP_BY_WEEK;
                     break;
 
                 case R.id.menu_month_view:
-                    groupingMode = 2; // Month grouping
+                    groupingMode = DateGroupedTransactionAdapter.GROUP_BY_MONTH;
                     newViewMode = ViewMode.GROUP_BY_MONTH;
+                    break;
+
+                case R.id.menu_category_view:
+                    groupingMode = DateGroupedTransactionAdapter.GROUP_BY_CATEGORY;
+                    newViewMode = ViewMode.GROUP_BY_CATEGORY;
+                    break;
+
+                case R.id.menu_merchant_view:
+                    groupingMode = DateGroupedTransactionAdapter.GROUP_BY_MERCHANT;
+                    newViewMode = ViewMode.GROUP_BY_MERCHANT;
+                    break;
+
+                case R.id.menu_amount_view:
+                    groupingMode = DateGroupedTransactionAdapter.GROUP_BY_AMOUNT_RANGE;
+                    newViewMode = ViewMode.GROUP_BY_AMOUNT_RANGE;
+                    break;
+
+                case R.id.menu_bank_view:
+                    groupingMode = DateGroupedTransactionAdapter.GROUP_BY_BANK;
+                    newViewMode = ViewMode.GROUP_BY_BANK;
                     break;
 
                 default:
@@ -417,6 +454,22 @@ public class MainActivity extends AppCompatActivity {
             case GROUP_BY_MONTH:
                 viewModeButton.setIcon(getDrawable(R.drawable.ic_view_module));
                 viewModeButton.setText("Month View");
+                break;
+            case GROUP_BY_CATEGORY:
+                viewModeButton.setIcon(getDrawable(R.drawable.ic_category));
+                viewModeButton.setText("Category View");
+                break;
+            case GROUP_BY_MERCHANT:
+                viewModeButton.setIcon(getDrawable(R.drawable.ic_store));
+                viewModeButton.setText("Merchant View");
+                break;
+            case GROUP_BY_AMOUNT_RANGE:
+                viewModeButton.setIcon(getDrawable(R.drawable.ic_money));
+                viewModeButton.setText("Amount View");
+                break;
+            case GROUP_BY_BANK:
+                viewModeButton.setIcon(getDrawable(R.drawable.ic_bank));
+                viewModeButton.setText("Bank View");
                 break;
         }
     }

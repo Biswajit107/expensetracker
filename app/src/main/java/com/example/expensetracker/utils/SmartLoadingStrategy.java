@@ -44,7 +44,7 @@ public class SmartLoadingStrategy {
     private final TextView emptyStateText;
     private final View loadingIndicator;
     private FilterState currentFilterState;
-    private int groupingMode = 0; // 0 = Day, 1 = Week, 2 = Month
+    private int groupingMode = 0; // 0 = Day, 1 = Week, 2 = Month, 3 = Category, 4 = Merchant, 5 = Amount Range, 6 = Bank
 
     // Interfaces for loading callbacks
     public interface TransactionLoadCallback {
@@ -252,75 +252,9 @@ public class SmartLoadingStrategy {
         });
     }
 
-//    /**
-//     * Load transactions in grouped view (by date)
-//     */
-//    private void loadGroupedTransactions(long fromDate, long toDate) {
-//        Log.d(TAG, "Using grouped transaction view");
-//        executorService.execute(() -> {
-//            try {
-//                TransactionDao dao = TransactionDatabase.getInstance(context).transactionDao();
-//
-//                // Load all transactions for the date range
-//                // For grouped view, we need all data at once to group properly
-//                List<Transaction> transactions;
-//
-//                if (currentFilterState.viewingManuallyExcluded) {
-//                    transactions = dao.getManuallyExcludedTransactionsBetweenDatesSync(fromDate, toDate);
-//                } else {
-//                    transactions = dao.getNonExcludedTransactionsBetweenDatesSync(fromDate, toDate);
-//                }
-//
-//                // Apply any additional filters if needed
-//                if (currentFilterState != null && currentFilterState.isAnyFilterActive()) {
-//                    transactions = currentFilterState.applyFilters(transactions);
-//                }
-//
-//                // Switch to the grouped adapter if not already
-//                if (!isGroupedViewActive) {
-//                    isGroupedViewActive = true;
-//                    updateAdapterInMainThread(groupedAdapter);
-//                }
-//
-//                List<Transaction> finalTransactions = transactions;
-//
-//                // Update UI in main thread
-//                if (context instanceof android.app.Activity) {
-//                    ((android.app.Activity) context).runOnUiThread(() -> {
-//                        if (loadingIndicator != null) {
-//                            loadingIndicator.setVisibility(View.GONE);
-//                        }
-//
-//                        if (finalTransactions != null && !finalTransactions.isEmpty()) {
-//                            // Group transactions and update adapter
-//                            groupedAdapter.setTransactions(finalTransactions);
-//
-//                            // Hide empty state
-//                            if (emptyStateText != null) {
-//                                emptyStateText.setVisibility(View.GONE);
-//                            }
-//                        } else {
-//                            // Show empty state
-//                            if (emptyStateText != null) {
-//                                emptyStateText.setVisibility(View.VISIBLE);
-//                            }
-//
-//                            // Clear the adapter
-//                            groupedAdapter.setTransactions(new ArrayList<>());
-//                        }
-//
-//                        isLoading = false;
-//                    });
-//                }
-//            } catch (Exception e) {
-//                Log.e(TAG, "Error loading grouped transactions", e);
-//
-//                // Fallback to pagination on error
-//                loadPaginatedTransactions(fromDate, toDate);
-//            }
-//        });
-//    }
-
+    /**
+     * Load transactions in grouped view
+     */
     private void loadGroupedTransactions(long fromDate, long toDate) {
         Log.d(TAG, "Using grouped transaction view with mode: " + groupingMode);
         executorService.execute(() -> {
@@ -371,6 +305,9 @@ public class SmartLoadingStrategy {
                             if (emptyStateText != null) {
                                 emptyStateText.setVisibility(View.GONE);
                             }
+
+                            // Update transaction count indicators if filters are active
+                            updateFilterIndicator(finalTransactions);
                         } else {
                             // Show empty state
                             if (emptyStateText != null) {
@@ -448,6 +385,9 @@ public class SmartLoadingStrategy {
                             if (emptyStateText != null) {
                                 emptyStateText.setVisibility(View.GONE);
                             }
+
+                            // Update transaction count indicators if filters are active
+                            updateFilterIndicator(finalTransactions);
                         } else {
                             // Show empty state
                             if (emptyStateText != null) {
@@ -479,7 +419,7 @@ public class SmartLoadingStrategy {
         });
     }
 
-    // Add this method to SmartLoadingStrategy.java
+    // Update filter indicator in MainActivity
     private void updateFilterIndicator(List<Transaction> transactions) {
         if (context instanceof MainActivity) {
             MainActivity activity = (MainActivity) context;
@@ -537,7 +477,6 @@ public class SmartLoadingStrategy {
             }
         }
     }
-
 
     /**
      * Helper to update adapter in main thread
@@ -597,6 +536,37 @@ public class SmartLoadingStrategy {
 
         // Load transactions with the current view mode
         loadTransactionsForDateRange(fromDate, toDate);
+    }
+
+    /**
+     * Set the grouping mode for transaction groups
+     * @param mode The grouping mode (0 = Day, 1 = Week, 2 = Month, 3 = Category, 4 = Merchant, 5 = Amount Range, 6 = Bank)
+     */
+    public void setGroupingMode(int mode) {
+        if (this.groupingMode != mode) {
+            this.groupingMode = mode;
+
+            // If we're in grouped view, reload with new grouping
+            if (isGroupedViewActive) {
+                // If context is MainActivity, get the date range
+                if (context instanceof MainActivity) {
+                    MainActivity activity = (MainActivity) context;
+                    long fromDate = activity.getFromDate();
+                    long toDate = activity.getToDate();
+
+                    // Reload grouped data with new grouping mode
+                    loadGroupedTransactions(fromDate, toDate);
+                }
+            }
+        }
+    }
+
+    /**
+     * Get the current grouping mode
+     * @return The grouping mode
+     */
+    public int getGroupingMode() {
+        return groupingMode;
     }
 
     /**
@@ -729,36 +699,5 @@ public class SmartLoadingStrategy {
                     break;
             }
         }
-    }
-
-    /**
-     * Set the grouping mode for transaction groups
-     * @param mode The grouping mode (0 = Day, 1 = Week, 2 = Month)
-     */
-    public void setGroupingMode(int mode) {
-        if (this.groupingMode != mode) {
-            this.groupingMode = mode;
-
-            // If we're in grouped view, reload with new grouping
-            if (isGroupedViewActive) {
-                // If context is MainActivity, get the date range
-                if (context instanceof MainActivity) {
-                    MainActivity activity = (MainActivity) context;
-                    long fromDate = activity.getFromDate();
-                    long toDate = activity.getToDate();
-
-                    // Reload grouped data with new grouping mode
-                    loadGroupedTransactions(fromDate, toDate);
-                }
-            }
-        }
-    }
-
-    /**
-     * Get the current grouping mode
-     * @return The grouping mode (0 = Day, 1 = Week, 2 = Month)
-     */
-    public int getGroupingMode() {
-        return groupingMode;
     }
 }

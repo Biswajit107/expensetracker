@@ -4,16 +4,42 @@
         android:id="@+id/menu_list_view"
         android:title="List View"
         android:icon="@drawable/ic_view_list" />
-    <item
-        android:id="@+id/menu_day_view"
-        android:title="Day View"
-        android:icon="@drawable/ic_calendar_day" />
-    <item
-        android:id="@+id/menu_week_view"
-        android:title="Week View"
-        android:icon="@drawable/ic_calendar_week" />
-    <item
-        android:id="@+id/menu_month_view"
-        android:title="Month View"
-        android:icon="@drawable/ic_calendar_month" />
+
+    <item android:title="Date Grouping">
+        <menu>
+            <item
+                android:id="@+id/menu_day_view"
+                android:title="Group by Day"
+                android:icon="@drawable/ic_calendar_day" />
+            <item
+                android:id="@+id/menu_week_view"
+                android:title="Group by Week"
+                android:icon="@drawable/ic_calendar_week" />
+            <item
+                android:id="@+id/menu_month_view"
+                android:title="Group by Month"
+                android:icon="@drawable/ic_calendar_month" />
+        </menu>
+    </item>
+
+    <item android:title="Category Grouping">
+        <menu>
+            <item
+                android:id="@+id/menu_category_view"
+                android:title="Group by Category"
+                android:icon="@drawable/ic_category" />
+            <item
+                android:id="@+id/menu_merchant_view"
+                android:title="Group by Merchant"
+                android:icon="@drawable/ic_store" />
+            <item
+                android:id="@+id/menu_amount_view"
+                android:title="Group by Amount Range"
+                android:icon="@drawable/ic_money" />
+            <item
+                android:id="@+id/menu_bank_view"
+                android:title="Group by Bank"
+                android:icon="@drawable/ic_bank" />
+        </menu>
+    </item>
 </menu>
