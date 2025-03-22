@@ -65,7 +65,6 @@ import java.lang.reflect.Method;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -101,12 +100,7 @@ public class MainActivity extends AppCompatActivity {
     private EditText searchInput;
     private Button sortButton;
     private Button filterButton;
-    private List<Transaction> allTransactions = new ArrayList<>();
 
-    private static final int PAGE_SIZE = 25;
-    private int currentPage = 0;
-    private boolean isLoading = false;
-    private boolean hasMoreData = true;
     private FilterState currentFilterState = new FilterState();
     private SmartLoadingStrategy smartLoadingStrategy;
     private MaterialButton viewModeButton;
@@ -135,8 +129,7 @@ public class MainActivity extends AppCompatActivity {
         setupDateRangeUI();
         setupDefaultDates();
 
-        // Set up new components
-        setupPagination();
+        // Set up components
         setupSpendingChart();
         setupDateRangeChips();
         setupCategoryFilter();
@@ -148,8 +141,10 @@ public class MainActivity extends AppCompatActivity {
         checkAndRequestSMSPermissions();
         setupBottomNavigation();
 
+        // Initialize the SmartLoadingStrategy
         initializeSmartLoadingStrategy();
 
+        // Load user's view mode preference
         boolean preferGroupedView = preferencesManager.getViewModePreference();
         int groupingMode = preferencesManager.getGroupingModePreference();
 
@@ -177,7 +172,6 @@ public class MainActivity extends AppCompatActivity {
             smartLoadingStrategy.setGroupingMode(groupingMode);
             smartLoadingStrategy.setForceViewMode(preferGroupedView);
         }
-
     }
 
     private void initializeSmartLoadingStrategy() {
@@ -204,16 +198,8 @@ public class MainActivity extends AppCompatActivity {
             showEditTransactionDialog(transaction);
         });
 
-//        // Load user's view mode preference
-//        PreferencesManager preferencesManager = new PreferencesManager(this);
-        boolean preferGroupedView = preferencesManager.getViewModePreference();
-//        currentViewMode = preferGroupedView ? ViewMode.GROUP : ViewMode.LIST;
-//
-//        // Apply user's preferred view mode
-//        smartLoadingStrategy.setForceViewMode(preferGroupedView);
-
         // Log the initial view mode
-        Log.d(TAG, "Starting with " + (preferGroupedView ? "grouped" : "list") + " view based on user preference");
+        Log.d(TAG, "Starting with " + (preferencesManager.getViewModePreference() ? "grouped" : "list") + " view based on user preference");
     }
 
     private void initializeViews() {
@@ -252,37 +238,41 @@ public class MainActivity extends AppCompatActivity {
         // Setup clear filter button
         if (clearFilterButton != null) {
             clearFilterButton.setOnClickListener(v -> {
-                // Clear the filter state
-                currentFilterState.viewingManuallyExcluded = false;
-                currentFilterState.searchQuery = "";
-                currentFilterState.category = null;
-                currentFilterState.bank = "All Banks";
-                currentFilterState.type = "All Types";
+                // Reset filter state
+                currentFilterState = new FilterState();
 
-                // Hide the filter indicator
+                // Hide filter indicator
                 if (filterIndicatorContainer != null) {
                     filterIndicatorContainer.setVisibility(View.GONE);
                 }
 
-                // Uncheck the category filter chips
+                // Uncheck category chips
                 ChipGroup categoryFilterChipGroup = findViewById(R.id.categoryFilterChipGroup);
                 if (categoryFilterChipGroup != null) {
                     categoryFilterChipGroup.clearCheck();
+
+                    // Select "All Categories" chip if it exists
+                    for (int i = 0; i < categoryFilterChipGroup.getChildCount(); i++) {
+                        View child = categoryFilterChipGroup.getChildAt(i);
+                        if (child instanceof Chip) {
+                            Chip chip = (Chip) child;
+                            if ("All Categories".equals(chip.getText().toString())) {
+                                chip.setChecked(true);
+                                break;
+                            }
+                        }
+                    }
                 }
 
                 // Clear search box
-                EditText searchInput = findViewById(R.id.searchInput);
                 if (searchInput != null) {
                     searchInput.setText("");
                 }
 
-                // Reload transactions without filter
+                // Reload data with no filters
                 if (smartLoadingStrategy != null) {
                     smartLoadingStrategy.updateFilterState(currentFilterState);
                     smartLoadingStrategy.refreshData(fromDate, toDate);
-                } else {
-                    // Reset pagination and reload all transactions
-                    resetPagination();
                 }
             });
         }
@@ -300,29 +290,6 @@ public class MainActivity extends AppCompatActivity {
             toggleViewMode();
         });
     }
-
-//    private void toggleViewMode() {
-//        // Toggle mode
-//        currentViewMode = (currentViewMode == ViewMode.LIST) ? ViewMode.GROUP : ViewMode.LIST;
-//
-//        // Update button appearance
-//        updateViewModeButtonAppearance();
-//
-//        // Force smart loading strategy to use the selected view mode
-//        if (smartLoadingStrategy != null) {
-//            smartLoadingStrategy.setForceViewMode(currentViewMode == ViewMode.GROUP);
-//
-//            // Reload data with new view mode
-//            refreshTransactions();
-//        }
-//    }
-
-    /**
-     * Toggle the view mode - replaces the existing method
-     */
-//    private void toggleViewMode() {
-//        showGroupingModeSelector();
-//    }
 
     /**
      * Toggle the view mode - shows a popup menu with view options
@@ -442,6 +409,43 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Update the current view mode
+     */
+    private void updateViewMode(ViewMode viewMode) {
+        // Only process if we're actually changing the mode
+        if (currentViewMode == viewMode) {
+            return; // No change needed
+        }
+
+        currentViewMode = viewMode;
+
+        // Update button appearance
+        updateViewModeButtonAppearance();
+
+        // Update SmartLoadingStrategy
+        if (smartLoadingStrategy != null) {
+            boolean isGroupView = viewMode != ViewMode.LIST;
+            smartLoadingStrategy.setForceViewMode(isGroupView);
+
+            // Set appropriate grouping mode based on view mode
+            if (isGroupView) {
+                int groupingMode = 0; // Default to day grouping
+
+                if (viewMode == ViewMode.GROUP_BY_WEEK) {
+                    groupingMode = 1;
+                } else if (viewMode == ViewMode.GROUP_BY_MONTH) {
+                    groupingMode = 2;
+                }
+
+                smartLoadingStrategy.setGroupingMode(groupingMode);
+            }
+
+            // Reload data
+            refreshTransactions();
+        }
+    }
+
     private void setupRecyclerView() {
         RecyclerView recyclerView = findViewById(R.id.recyclerView);
         if (recyclerView == null) {
@@ -461,9 +465,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupViewModel() {
         viewModel = new ViewModelProvider(this).get(TransactionViewModel.class);
-
-        // Set up initial transaction loading
-        resetPagination();
 
         // Observe budget changes
         viewModel.getBudget().observe(this, budget -> {
@@ -490,190 +491,17 @@ public class MainActivity extends AppCompatActivity {
             // Update the transaction in the database
             viewModel.updateTransaction(editedTransaction);
 
-            // Instead of calling updateTransactionsList() which resets filters,
-            // we'll just update the transaction in our local lists and adapter
-            updateTransactionInLists(editedTransaction);
-
-            // Force adapter to refresh this specific item's visual appearance
-            int position = -1;
-            List<Transaction> currentTransactions = adapter.getTransactions();
-            for (int i = 0; i < currentTransactions.size(); i++) {
-                if (currentTransactions.get(i).getId() == editedTransaction.getId()) {
-                    position = i;
-                    break;
-                }
+            // Update in smart loading strategy
+            if (smartLoadingStrategy != null) {
+                smartLoadingStrategy.updateTransactionInAdapters(editedTransaction);
             }
 
-            if (position >= 0) {
-                adapter.notifyItemChanged(position);
-            }
-
+            // Show a confirmation
+            Toast.makeText(this, "Transaction updated", Toast.LENGTH_SHORT).show();
         });
 
         // Show the dialog
         dialog.show(getSupportFragmentManager(), "edit_transaction");
-    }
-
-    private void updateTransactionInLists(Transaction editedTransaction) {
-        // Update in allTransactions
-        for (int i = 0; i < allTransactions.size(); i++) {
-            if (allTransactions.get(i).getId() == editedTransaction.getId()) {
-                allTransactions.set(i, editedTransaction);
-                break;
-            }
-        }
-
-        // Apply current filters to get the updated list
-        List<Transaction> filteredList = currentFilterState.applyFilters(allTransactions);
-
-        // Update the adapter with the properly filtered list
-        adapter.setTransactions(filteredList);
-
-        // Notify the adapter about the specific change
-        // This forces a visual update of the transaction in the list
-        for (int i = 0; i < adapter.getTransactions().size(); i++) {
-            if (adapter.getTransactions().get(i).getId() == editedTransaction.getId()) {
-                adapter.notifyItemChanged(i);
-                break;
-            }
-        }
-
-        // Also update in smartLoadingStrategy if available
-        if (smartLoadingStrategy != null) {
-            smartLoadingStrategy.updateTransactionInAdapters(editedTransaction);
-        }
-
-        // Update the summary
-        updateSummaryWithBudget(filteredList, viewModel.getBudget().getValue());
-
-        // Show a confirmation
-        Toast.makeText(this, "Transaction updated", Toast.LENGTH_SHORT).show();
-    }
-
-    private void setupPagination() {
-        RecyclerView recyclerView = findViewById(R.id.recyclerView);
-        if (recyclerView == null) return;
-
-        recyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
-                super.onScrolled(recyclerView, dx, dy);
-
-                // Skip pagination if we're using grouped view
-                if (smartLoadingStrategy != null && smartLoadingStrategy.isGroupedViewActive()) {
-                    return;
-                }
-
-                LinearLayoutManager layoutManager = (LinearLayoutManager) recyclerView.getLayoutManager();
-                if (layoutManager == null) return;
-
-                int visibleItemCount = layoutManager.getChildCount();
-                int totalItemCount = layoutManager.getItemCount();
-                int firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition();
-
-                if (!isLoading && hasMoreData) {
-                    if ((visibleItemCount + firstVisibleItemPosition) >= totalItemCount
-                            && firstVisibleItemPosition >= 0
-                            && totalItemCount >= PAGE_SIZE) {
-                        // Load more data
-                        loadMoreTransactions();
-                    }
-                }
-            }
-        });
-    }
-
-    private void loadMoreTransactions() {
-        // Skip if we're using grouped view
-        if (smartLoadingStrategy != null && smartLoadingStrategy.isGroupedViewActive()) {
-            return;
-        }
-
-        // Proceed with normal pagination if not in grouped view
-        isLoading = true;
-
-        if (loadingIndicator != null) {
-            loadingIndicator.setVisibility(View.VISIBLE);
-        }
-
-        executorService.execute(() -> {
-            int offset = currentPage * PAGE_SIZE;
-
-            List<Transaction> nextPageTransactions;
-
-            // Check if we're viewing manually excluded transactions
-            if (currentFilterState.viewingManuallyExcluded) {
-                nextPageTransactions = viewModel.getManuallyExcludedTransactionsPaginatedSync(
-                        fromDate, toDate, PAGE_SIZE, offset);
-            }
-            // Otherwise, load regular transactions
-            else {
-                nextPageTransactions = viewModel.getNonExcludedTransactionsBetweenDatesPaginatedSync(
-                        fromDate, toDate, PAGE_SIZE, offset);
-            }
-
-            // If we got less items than PAGE_SIZE, we've reached the end
-            hasMoreData = nextPageTransactions != null && nextPageTransactions.size() == PAGE_SIZE;
-
-            List<Transaction> finalNextPageTransactions = nextPageTransactions;
-            runOnUiThread(() -> {
-                if (loadingIndicator != null) {
-                    loadingIndicator.setVisibility(View.GONE);
-                }
-
-                if (finalNextPageTransactions != null && !finalNextPageTransactions.isEmpty()) {
-                    // Add new items to adapter
-                    adapter.addTransactions(finalNextPageTransactions);
-
-                    // Add to all transactions list for filtering
-                    allTransactions.addAll(finalNextPageTransactions);
-
-                    // Update summary with all transactions
-                    updateSummaryWithBudget(allTransactions, viewModel.getBudget().getValue());
-
-                    // Update empty state view
-                    if (emptyStateText != null) {
-                        emptyStateText.setVisibility(View.GONE);
-                    }
-                } else if (adapter.getItemCount() == 0 && emptyStateText != null) {
-                    // Show empty state
-                    emptyStateText.setVisibility(View.VISIBLE);
-                }
-
-                currentPage++;
-                isLoading = false;
-            });
-        });
-    }
-
-    private void resetPagination() {
-        currentPage = 0;
-        hasMoreData = true;
-        allTransactions.clear();
-
-        if (adapter != null) {
-            adapter.clearTransactions();
-        }
-
-        // Reset summary totals to zero initially
-        if (totalDebitsText != null) {
-            totalDebitsText.setText(String.format(Locale.getDefault(), "₹%.2f", 0.0));
-        }
-
-        if (totalCreditsText != null) {
-            totalCreditsText.setText(String.format(Locale.getDefault(), "₹%.2f", 0.0));
-        }
-
-        if (balanceText != null) {
-            balanceText.setText(String.format(Locale.getDefault(), "₹%.2f", 0.0));
-        }
-
-        loadMoreTransactions();
-
-        setupSpendingChart();
-
-        updateSummaryWithBudget(adapter.getTransactions(), viewModel.getBudget().getValue());
-
     }
 
     private void setupSearch() {
@@ -697,41 +525,24 @@ public class MainActivity extends AppCompatActivity {
         // Update filter state
         currentFilterState.searchQuery = query;
 
-        // If we're using smart loading strategy
-        if (smartLoadingStrategy != null) {
-            // Update the smart loading strategy with the new filter state
-            smartLoadingStrategy.updateFilterState(currentFilterState);
+        // Update filter indicator UI immediately
+        if (filterIndicatorContainer != null) {
+            if (!query.isEmpty()) {
+                filterIndicatorContainer.setVisibility(View.VISIBLE);
+                filterIndicator.setText("Search: " + query);
 
-            // Reload data with the new filter - this is likely asynchronous
-            smartLoadingStrategy.refreshData(fromDate, toDate);
-
-            // Update filter indicator UI immediately
-            updateFilterIndicatorUI(query);
-        } else {
-            // For non-smart loading strategy, apply filters manually
-            List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
-            adapter.setTransactions(filteredTransactions);
-
-            // Update filter indicator UI
-            updateFilterIndicatorUI(query);
-
-            // Update result count text
-            if (resultCount != null) {
-                resultCount.setText(String.format(Locale.getDefault(),
-                        "%d transaction(s) found", filteredTransactions.size()));
+                if (resultCount != null) {
+                    resultCount.setText("Loading...");
+                }
+            } else if (!currentFilterState.isAnyFilterActive()) {
+                filterIndicatorContainer.setVisibility(View.GONE);
             }
         }
-    }
 
-    // Helper method to update filter indicator UI
-    private void updateFilterIndicatorUI(String query) {
-        if (filterIndicatorContainer == null) return;
-
-        if (query != null && !query.isEmpty()) {
-            filterIndicatorContainer.setVisibility(View.VISIBLE);
-            filterIndicator.setText("Search: " + query);
-        } else if (!currentFilterState.isAnyFilterActive()) {
-            filterIndicatorContainer.setVisibility(View.GONE);
+        // Use the smart loading strategy to load filtered data
+        if (smartLoadingStrategy != null) {
+            smartLoadingStrategy.updateFilterState(currentFilterState);
+            smartLoadingStrategy.refreshData(fromDate, toDate);
         }
     }
 
@@ -765,42 +576,10 @@ public class MainActivity extends AppCompatActivity {
         // Update filter state
         currentFilterState.sortOption = sortOption;
 
-        // Get current list and apply sort
-        List<Transaction> currentList = new ArrayList<>(adapter.getTransactions());
-        sortTransactions(currentList, sortOption);
-
-        // Update adapter with sorted list
-        adapter.setTransactions(currentList);
-    }
-
-    private static void sortTransactions(List<Transaction> transactions, int sortOption) {
-        switch (sortOption) {
-            case 0: // Date (newest first)
-                Collections.sort(transactions, (a, b) -> Long.compare(b.getDate(), a.getDate()));
-                break;
-            case 1: // Date (oldest first)
-                Collections.sort(transactions, (a, b) -> Long.compare(a.getDate(), b.getDate()));
-                break;
-            case 2: // Amount (highest first)
-                Collections.sort(transactions, (a, b) -> Double.compare(b.getAmount(), a.getAmount()));
-                break;
-            case 3: // Amount (lowest first)
-                Collections.sort(transactions, (a, b) -> Double.compare(a.getAmount(), b.getAmount()));
-                break;
-            case 4: // Description (A-Z)
-                Collections.sort(transactions, (a, b) -> {
-                    String descA = a.getDescription() != null ? a.getDescription() : "";
-                    String descB = b.getDescription() != null ? b.getDescription() : "";
-                    return descA.compareToIgnoreCase(descB);
-                });
-                break;
-            case 5: // Description (Z-A)
-                Collections.sort(transactions, (a, b) -> {
-                    String descA = a.getDescription() != null ? a.getDescription() : "";
-                    String descB = b.getDescription() != null ? b.getDescription() : "";
-                    return descB.compareToIgnoreCase(descA);
-                });
-                break;
+        // Use smart loading strategy to apply sort
+        if (smartLoadingStrategy != null) {
+            smartLoadingStrategy.updateFilterState(currentFilterState);
+            smartLoadingStrategy.refreshData(fromDate, toDate);
         }
     }
 
@@ -864,12 +643,10 @@ public class MainActivity extends AppCompatActivity {
                     filterIndicatorContainer.setVisibility(View.GONE);
                 }
 
-                // Reload data without filters - this is important for both view modes
+                // Reload data without filters
                 if (smartLoadingStrategy != null) {
                     smartLoadingStrategy.updateFilterState(currentFilterState);
                     smartLoadingStrategy.refreshData(fromDate, toDate);
-                } else {
-                    resetPagination();
                 }
                 return;
             }
@@ -881,7 +658,18 @@ public class MainActivity extends AppCompatActivity {
                 // If "All Categories" is selected, don't filter by category
                 if ("All Categories".equals(selectedCategory)) {
                     currentFilterState.viewingManuallyExcluded = false;
-                    filterTransactionsByCategory(null);
+                    currentFilterState.category = null;
+
+                    // Hide filter if no other filters active
+                    if (!currentFilterState.isAnyFilterActive() && filterIndicatorContainer != null) {
+                        filterIndicatorContainer.setVisibility(View.GONE);
+                    }
+
+                    // Reload without category filter
+                    if (smartLoadingStrategy != null) {
+                        smartLoadingStrategy.updateFilterState(currentFilterState);
+                        smartLoadingStrategy.refreshData(fromDate, toDate);
+                    }
                 }
                 // Special handling for "Manually Excluded" filter
                 else if ("Manually Excluded".equals(selectedCategory)) {
@@ -889,7 +677,6 @@ public class MainActivity extends AppCompatActivity {
                 }
                 // Regular category filtering
                 else {
-                    currentFilterState.viewingManuallyExcluded = false;
                     filterTransactionsByCategory(selectedCategory);
                 }
             }
@@ -904,91 +691,23 @@ public class MainActivity extends AppCompatActivity {
         if (filterIndicatorContainer != null) {
             filterIndicatorContainer.setVisibility(View.VISIBLE);
             filterIndicator.setText("Viewing: Manually Excluded Transactions");
+
+            if (resultCount != null) {
+                resultCount.setText("Loading...");
+            }
         }
 
-        // Use the smart loading strategy if available
+        // Use the smart loading strategy to load manually excluded transactions
         if (smartLoadingStrategy != null) {
-            // Update the strategy with our new filter state
             smartLoadingStrategy.updateFilterState(currentFilterState);
-            // Force a reload of data with the new filter state
             smartLoadingStrategy.refreshData(fromDate, toDate);
-            return;
         }
-
-        // Clear existing data
-        adapter.clearTransactions();
-        allTransactions.clear();
-        currentPage = 0;
-        hasMoreData = true;
-
-        // Show loading indicator
-        if (loadingIndicator != null) {
-            loadingIndicator.setVisibility(View.VISIBLE);
-        }
-
-        // Load manually excluded transactions
-        executorService.execute(() -> {
-            // Get manually excluded transactions
-            List<Transaction> manuallyExcludedTransactions = viewModel.getManuallyExcludedTransactionsPaginatedSync(
-                    fromDate, toDate, PAGE_SIZE, 0);
-
-            // Update UI
-            runOnUiThread(() -> {
-                if (loadingIndicator != null) {
-                    loadingIndicator.setVisibility(View.GONE);
-                }
-
-                if (manuallyExcludedTransactions != null && !manuallyExcludedTransactions.isEmpty()) {
-                    adapter.setTransactions(manuallyExcludedTransactions);
-                    allTransactions.addAll(manuallyExcludedTransactions);
-
-                    // Update filter indicator
-                    if (filterIndicatorContainer != null) {
-                        filterIndicatorContainer.setVisibility(View.VISIBLE);
-                        filterIndicator.setText("Viewing: Manually Excluded Transactions");
-
-                        if (resultCount != null) {
-                            resultCount.setText(String.format(Locale.getDefault(),
-                                    "%d transaction(s) found", manuallyExcludedTransactions.size()));
-                        }
-                    }
-
-                    // Hide empty state
-                    if (emptyStateText != null) {
-                        emptyStateText.setVisibility(View.GONE);
-                    }
-                } else {
-                    // Show empty state
-                    if (emptyStateText != null) {
-                        emptyStateText.setVisibility(View.VISIBLE);
-                        emptyStateText.setText("No manually excluded transactions found");
-                    }
-
-                    // Update filter indicator
-                    if (filterIndicatorContainer != null) {
-                        filterIndicatorContainer.setVisibility(View.VISIBLE);
-                        filterIndicator.setText("Viewing: Manually Excluded Transactions");
-
-                        if (resultCount != null) {
-                            resultCount.setText("0 transactions found");
-                        }
-                    }
-                }
-            });
-        });
     }
-
 
     private void filterTransactionsByCategory(String category) {
         // Update filter state
         currentFilterState.category = category;
-
-        // Apply filters to allTransactions
-        List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
-
-        // Update adapter and UI
-        adapter.setTransactions(filteredTransactions);
-        updateSummaryWithBudget(filteredTransactions, viewModel.getBudget().getValue());
+        currentFilterState.viewingManuallyExcluded = false;
 
         // Show filter indicator
         if (filterIndicatorContainer != null) {
@@ -997,12 +716,17 @@ public class MainActivity extends AppCompatActivity {
                 filterIndicator.setText("Filtered by category: " + category);
 
                 if (resultCount != null) {
-                    resultCount.setText(String.format(Locale.getDefault(),
-                            "%d transaction(s) found", filteredTransactions.size()));
+                    resultCount.setText("Loading...");
                 }
             } else if (!currentFilterState.isAnyFilterActive()) {
                 filterIndicatorContainer.setVisibility(View.GONE);
             }
+        }
+
+        // Use smart loading strategy to load filtered data
+        if (smartLoadingStrategy != null) {
+            smartLoadingStrategy.updateFilterState(currentFilterState);
+            smartLoadingStrategy.refreshData(fromDate, toDate);
         }
     }
 
@@ -1028,7 +752,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Helper method to determine contrasting text color (white or black) based on background color
+    // Helper method to determine contrasting text color
     private int getContrastColor(int backgroundColor) {
         // Extract the red, green, and blue components
         int red = Color.red(backgroundColor);
@@ -1121,9 +845,8 @@ public class MainActivity extends AppCompatActivity {
         fromDate = cal.getTimeInMillis();
 
         updateDateButtonTexts();
-        refreshTransactions();
         preferencesManager.saveSelectedDateRange(fromDate, toDate);
-        checkForTransactionsAndLoad();
+        refreshTransactions();
     }
 
     private void setDateRangeYesterday() {
@@ -1146,9 +869,8 @@ public class MainActivity extends AppCompatActivity {
         fromDate = cal.getTimeInMillis();
 
         updateDateButtonTexts();
-        refreshTransactions();
         preferencesManager.saveSelectedDateRange(fromDate, toDate);
-        checkForTransactionsAndLoad();
+        refreshTransactions();
     }
 
     private void setDateRangeThisWeek() {
@@ -1171,9 +893,10 @@ public class MainActivity extends AppCompatActivity {
         fromDate = cal.getTimeInMillis();
 
         updateDateButtonTexts();
-        refreshTransactions();
         preferencesManager.saveSelectedDateRange(fromDate, toDate);
-        checkForTransactionsAndLoad();
+        refreshTransactions();
+        //checkForTransactionsAndLoad();
+
     }
 
     private void setDateRangeThisMonth() {
@@ -1196,9 +919,9 @@ public class MainActivity extends AppCompatActivity {
         fromDate = cal.getTimeInMillis();
 
         updateDateButtonTexts();
-        refreshTransactions();
         preferencesManager.saveSelectedDateRange(fromDate, toDate);
-        checkForTransactionsAndLoad();
+        refreshTransactions();
+
     }
 
     private void setDateRangeLast3Months() {
@@ -1223,93 +946,11 @@ public class MainActivity extends AppCompatActivity {
 
         updateDateButtonTexts();
 
+        // Also save the date range
+        preferencesManager.saveSelectedDateRange(fromDate, toDate);
         // Instead of just calling resetPagination(), call refreshTransactions()
         // which more thoroughly refreshes the data
         refreshTransactions();
-
-        // Also save the date range
-        preferencesManager.saveSelectedDateRange(fromDate, toDate);
-        checkForTransactionsAndLoad();
-    }
-
-    private void checkForTransactionsAndLoad() {
-        // Show loading indicator
-        if (loadingIndicator != null) {
-            loadingIndicator.setVisibility(View.VISIBLE);
-        }
-
-        executorService.execute(() -> {
-            try {
-                boolean shouldProcessSMS = false;
-
-                // Get current month boundaries
-                Calendar cal = Calendar.getInstance();
-                cal.set(Calendar.DAY_OF_MONTH, 1); // First day of current month
-                cal.set(Calendar.HOUR_OF_DAY, 0);
-                cal.set(Calendar.MINUTE, 0);
-                cal.set(Calendar.SECOND, 0);
-                cal.set(Calendar.MILLISECOND, 0);
-                long currentMonthStart = cal.getTimeInMillis();
-
-                cal.add(Calendar.MONTH, 1); // First day of next month
-                cal.add(Calendar.MILLISECOND, -1); // Last millisecond of current month
-                long currentMonthEnd = cal.getTimeInMillis();
-
-                // Check if selected date range extends beyond current month
-                if (fromDate < currentMonthStart || toDate > currentMonthEnd) {
-                    Log.d(TAG, "Selected date range extends beyond current month, checking for transactions");
-
-                    // Only need to check the portion outside current month
-                    long checkStartDate = Math.min(fromDate, currentMonthStart);
-                    long checkEndDate = Math.max(toDate, currentMonthEnd);
-
-                    if (fromDate < currentMonthStart) {
-                        checkStartDate = fromDate;
-                        checkEndDate = currentMonthStart - 1; // Up to just before current month
-                    } else if (toDate > currentMonthEnd) {
-                        checkStartDate = currentMonthEnd + 1; // Just after current month
-                        checkEndDate = toDate;
-                    }
-
-                    // Check if we have transactions in the non-current month portion
-                    int count = TransactionDatabase.getInstance(this)
-                            .transactionDao()
-                            .getTransactionCountBetweenDates(checkStartDate, checkEndDate);
-
-                    Log.d(TAG, "Found " + count + " transactions in date range outside current month");
-
-                    // Only process SMS if we don't have transactions outside current month
-                    shouldProcessSMS = (count == 0);
-                } else {
-                    // Date range is within current month, no need to process SMS
-                    Log.d(TAG, "Selected date range is within current month, no need to process SMS");
-                    shouldProcessSMS = false;
-                }
-
-                final boolean finalShouldProcessSMS = shouldProcessSMS;
-                runOnUiThread(() -> {
-                    if (finalShouldProcessSMS) {
-                        // We need to process SMS for non-current month data
-                        Log.d(TAG, "Processing SMS for selected date range");
-                        loadExistingSMS();
-                    } else {
-                        // We already have data or it's current month, just refresh display
-                        Log.d(TAG, "No need to process SMS, refreshing transactions");
-                        refreshTransactions();
-                    }
-                });
-            } catch (Exception e) {
-                Log.e(TAG, "Error checking for transactions", e);
-                runOnUiThread(() -> {
-                    // On error, fallback to just refreshing transactions
-                    refreshTransactions();
-
-                    if (loadingIndicator != null) {
-                        loadingIndicator.setVisibility(View.GONE);
-                    }
-                });
-            }
-        });
     }
 
     private void setupBudgetFab() {
@@ -1420,6 +1061,189 @@ public class MainActivity extends AppCompatActivity {
         });
 
         dialog.show();
+    }
+
+    private void showAdvancedFilterDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_advanced_filter, null);
+        builder.setView(dialogView);
+
+        // Initialize dialog views
+        AutoCompleteTextView bankFilterDropdown = dialogView.findViewById(R.id.bankFilterDropdown);
+        AutoCompleteTextView typeFilterDropdown = dialogView.findViewById(R.id.typeFilterDropdown);
+        AutoCompleteTextView categoryFilterDropdown = dialogView.findViewById(R.id.categoryFilterDropdown);
+        RangeSlider amountRangeSlider = dialogView.findViewById(R.id.amountRangeSlider);
+        TextView amountRangeText = dialogView.findViewById(R.id.amountRangeText);
+
+        // Get the exclude switch
+        androidx.appcompat.widget.SwitchCompat excludeSwitch = dialogView.findViewById(R.id.excludeSwitch);
+        if (excludeSwitch != null) {
+            // Set initial state based on current filter
+            excludeSwitch.setChecked(currentFilterState.showingExcluded);
+        }
+
+        // Setup filter dropdowns
+        ArrayAdapter<String> bankAdapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_dropdown_item_1line,
+                viewModel.getAvailableBanks()
+        );
+        bankFilterDropdown.setAdapter(bankAdapter);
+        bankFilterDropdown.setText(currentFilterState.bank, false);
+
+        ArrayAdapter<String> typeAdapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_dropdown_item_1line,
+                new String[]{"All Types", "DEBIT", "CREDIT"}
+        );
+        typeFilterDropdown.setAdapter(typeAdapter);
+        typeFilterDropdown.setText(currentFilterState.type, false);
+
+        ArrayAdapter<String> categoryAdapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_dropdown_item_1line,
+                Transaction.Categories.getAllCategories()
+        );
+        categoryFilterDropdown.setAdapter(categoryAdapter);
+        if (currentFilterState.category != null) {
+            categoryFilterDropdown.setText(currentFilterState.category, false);
+        }
+
+        // Set amount range slider
+        amountRangeSlider.setValueFrom(0f);
+        amountRangeSlider.setValueTo(100000f);
+
+        // Set initial values
+        List<Float> initialValues = new ArrayList<>();
+        initialValues.add((float)currentFilterState.minAmount);
+        initialValues.add((float)currentFilterState.maxAmount);
+        amountRangeSlider.setValues(initialValues);
+
+        // Update amount range text
+        amountRangeSlider.addOnChangeListener((slider, value, fromUser) -> {
+            List<Float> values = slider.getValues();
+            if (values != null && values.size() >= 2) {
+                amountRangeText.setText(String.format(Locale.getDefault(),
+                        "₹%.0f - ₹%.0f", values.get(0), values.get(1)));
+            }
+        });
+
+        // Setup buttons
+        Button applyButton = dialogView.findViewById(R.id.applyFilterButton);
+        Button resetButton = dialogView.findViewById(R.id.resetFilterButton);
+
+        // Create dialog
+        AlertDialog dialog = builder.create();
+
+        // Set button click listeners
+        applyButton.setOnClickListener(v -> {
+            // Get selected values
+            String bank = bankFilterDropdown.getText().toString();
+            String type = typeFilterDropdown.getText().toString();
+            String category = categoryFilterDropdown.getText().toString();
+
+            // Get amount range with safety checks
+            double minAmount = 0;
+            double maxAmount = 100000;
+            List<Float> values = amountRangeSlider.getValues();
+            if (values != null && values.size() >= 2) {
+                minAmount = values.get(0);
+                maxAmount = values.get(1);
+            }
+
+            // Get excluded switch state
+            boolean showExcluded = excludeSwitch != null && excludeSwitch.isChecked();
+
+            // Apply filters
+            applyAdvancedFilters(bank, type, category, minAmount, maxAmount, showExcluded);
+            dialog.dismiss();
+        });
+
+        resetButton.setOnClickListener(v -> {
+            // Reset all filters
+            currentFilterState = new FilterState();
+
+            // Hide filter indicators
+            if (filterIndicatorContainer != null) {
+                filterIndicatorContainer.setVisibility(View.GONE);
+            }
+
+            // Update SmartLoadingStrategy
+            if (smartLoadingStrategy != null) {
+                smartLoadingStrategy.updateFilterState(currentFilterState);
+                smartLoadingStrategy.refreshData(fromDate, toDate);
+            }
+
+            dialog.dismiss();
+        });
+
+        dialog.show();
+    }
+
+    private void applyAdvancedFilters(String bank, String type, String category,
+                                      double minAmount, double maxAmount, boolean showExcluded) {
+        // Check if excluded state is changing
+        boolean excludedStateChanged = currentFilterState.showingExcluded != showExcluded;
+
+        // Update filter state
+        currentFilterState.bank = bank;
+        currentFilterState.type = type;
+        currentFilterState.category = category;
+        currentFilterState.minAmount = minAmount;
+        currentFilterState.maxAmount = maxAmount;
+        currentFilterState.showingExcluded = showExcluded;
+
+        // Prepare filter description to display
+        StringBuilder filterDesc = new StringBuilder("Filtered by: ");
+        boolean hasFilter = false;
+
+        if (!"All Banks".equals(bank)) {
+            filterDesc.append(bank);
+            hasFilter = true;
+        }
+
+        if (!"All Types".equals(type)) {
+            if (hasFilter) filterDesc.append(", ");
+            filterDesc.append(type);
+            hasFilter = true;
+        }
+
+        if (category != null && !category.isEmpty()) {
+            if (hasFilter) filterDesc.append(", ");
+            filterDesc.append(category);
+            hasFilter = true;
+        }
+
+        if (minAmount > 0 || maxAmount < 100000) {
+            if (hasFilter) filterDesc.append(", ");
+            filterDesc.append("Amount ₹").append((int)minAmount).append("-₹").append((int)maxAmount);
+            hasFilter = true;
+        }
+
+        if (showExcluded) {
+            if (hasFilter) filterDesc.append(", ");
+            filterDesc.append("Including excluded");
+        }
+
+        // Update filter indicator UI immediately
+        if (filterIndicatorContainer != null) {
+            if (currentFilterState.isAnyFilterActive()) {
+                filterIndicatorContainer.setVisibility(View.VISIBLE);
+                filterIndicator.setText(filterDesc.toString());
+
+                if (resultCount != null) {
+                    resultCount.setText("Loading...");
+                }
+            } else {
+                filterIndicatorContainer.setVisibility(View.GONE);
+            }
+        }
+
+        // Use the smart loading strategy to apply filters
+        if (smartLoadingStrategy != null) {
+            smartLoadingStrategy.updateFilterState(currentFilterState);
+            smartLoadingStrategy.refreshData(fromDate, toDate);
+        }
     }
 
     private void setupSpendingChart() {
@@ -1547,237 +1371,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void showAdvancedFilterDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_advanced_filter, null);
-        builder.setView(dialogView);
-
-        // Initialize dialog views
-        AutoCompleteTextView bankFilterDropdown = dialogView.findViewById(R.id.bankFilterDropdown);
-        AutoCompleteTextView typeFilterDropdown = dialogView.findViewById(R.id.typeFilterDropdown);
-        AutoCompleteTextView categoryFilterDropdown = dialogView.findViewById(R.id.categoryFilterDropdown);
-        RangeSlider amountRangeSlider = dialogView.findViewById(R.id.amountRangeSlider);
-        TextView amountRangeText = dialogView.findViewById(R.id.amountRangeText);
-
-        // Get the exclude switch
-        androidx.appcompat.widget.SwitchCompat excludeSwitch = dialogView.findViewById(R.id.excludeSwitch);
-        if (excludeSwitch != null) {
-            // Set initial state based on current filter
-            excludeSwitch.setChecked(currentFilterState.showingExcluded);
-        }
-
-        // Setup filter dropdowns (unchanged)
-        ArrayAdapter<String> bankAdapter = new ArrayAdapter<>(
-                this,
-                android.R.layout.simple_dropdown_item_1line,
-                viewModel.getAvailableBanks()
-        );
-        bankFilterDropdown.setAdapter(bankAdapter);
-        bankFilterDropdown.setText("All Banks", false);
-
-        ArrayAdapter<String> typeAdapter = new ArrayAdapter<>(
-                this,
-                android.R.layout.simple_dropdown_item_1line,
-                new String[]{"All Types", "DEBIT", "CREDIT"}
-        );
-        typeFilterDropdown.setAdapter(typeAdapter);
-        typeFilterDropdown.setText("All Types", false);
-
-        ArrayAdapter<String> categoryAdapter = new ArrayAdapter<>(
-                this,
-                android.R.layout.simple_dropdown_item_1line,
-                Transaction.Categories.getAllCategories()
-        );
-        categoryFilterDropdown.setAdapter(categoryAdapter);
-
-        // Set initial values for the slider
-        amountRangeSlider.setValueFrom(0f);
-        amountRangeSlider.setValueTo(100000f);
-
-        // Create a list with initial values
-        List<Float> initialValues = new ArrayList<>();
-        initialValues.add(0f);
-        initialValues.add(100000f);
-        amountRangeSlider.setValues(initialValues);
-
-        // Update amount range text when slider changes
-        amountRangeSlider.addOnChangeListener((slider, value, fromUser) -> {
-            List<Float> values = slider.getValues();
-            if (values != null && values.size() >= 2) {
-                amountRangeText.setText(String.format(Locale.getDefault(),
-                        "₹%.0f - ₹%.0f", values.get(0), values.get(1)));
-            }
-        });
-
-        // Setup buttons
-        Button applyButton = dialogView.findViewById(R.id.applyFilterButton);
-        Button resetButton = dialogView.findViewById(R.id.resetFilterButton);
-
-        // Create dialog
-        AlertDialog dialog = builder.create();
-
-        // Set button click listeners
-        applyButton.setOnClickListener(v -> {
-            // Get selected values
-            String bank = bankFilterDropdown.getText().toString();
-            String type = typeFilterDropdown.getText().toString();
-            String category = categoryFilterDropdown.getText().toString();
-
-            // Get amount range with safety checks
-            double minAmount = 0;
-            double maxAmount = 100000;
-            List<Float> values = amountRangeSlider.getValues();
-            if (values != null && values.size() >= 2) {
-                minAmount = values.get(0);
-                maxAmount = values.get(1);
-            }
-
-            // Get excluded switch state
-            boolean showExcluded = excludeSwitch != null && excludeSwitch.isChecked();
-
-            // Apply filters with excluded state
-            applyAdvancedFilters(bank, type, category, minAmount, maxAmount, showExcluded);
-            dialog.dismiss();
-        });
-
-        resetButton.setOnClickListener(v -> {
-            // Reset all filters
-            currentFilterState = new FilterState(); // Reset to default state (with showingExcluded = false)
-
-            // Reset and reload transactions
-            resetPagination();
-
-            // Hide filter indicators
-            if (filterIndicatorContainer != null) {
-                filterIndicatorContainer.setVisibility(View.GONE);
-            }
-
-            dialog.dismiss();
-        });
-
-        dialog.show();
-    }
-
-    // Fix for applyAdvancedFilters method
-    private void applyAdvancedFilters(String bank, String type, String category,
-                                      double minAmount, double maxAmount, boolean showExcluded) {
-        // Check if excluded state is changing
-        boolean excludedStateChanged = currentFilterState.showingExcluded != showExcluded;
-
-        // Update filter state
-        currentFilterState.bank = bank;
-        currentFilterState.type = type;
-        currentFilterState.category = category;
-        currentFilterState.minAmount = minAmount;
-        currentFilterState.maxAmount = maxAmount;
-        currentFilterState.showingExcluded = showExcluded;
-
-        // This is the critical part - update the smart loading strategy with our new filter state
-        if (smartLoadingStrategy != null) {
-            smartLoadingStrategy.updateFilterState(currentFilterState);
-
-            // Force a refresh of the data with new filters
-            smartLoadingStrategy.refreshData(fromDate, toDate);
-        } else {
-            // If excluded state changed, we need to reload data from database
-            if (excludedStateChanged) {
-                // Reset pagination and reload
-                resetPagination();
-            } else {
-                // Just apply filters to existing data
-                List<Transaction> filteredTransactions = currentFilterState.applyFilters(allTransactions);
-                adapter.setTransactions(filteredTransactions);
-                updateSummaryWithBudget(filteredTransactions, viewModel.getBudget().getValue());
-            }
-        }
-
-        // Show filter indicator
-        if (filterIndicatorContainer != null) {
-            if (currentFilterState.isAnyFilterActive()) {
-                filterIndicatorContainer.setVisibility(View.VISIBLE);
-
-                // Prepare filter description
-                StringBuilder filterDesc = new StringBuilder("Filtered by: ");
-                boolean hasFilter = false;
-
-                if (!"All Banks".equals(bank)) {
-                    filterDesc.append(bank);
-                    hasFilter = true;
-                }
-
-                if (!"All Types".equals(type)) {
-                    if (hasFilter) filterDesc.append(", ");
-                    filterDesc.append(type);
-                    hasFilter = true;
-                }
-
-                if (category != null && !category.isEmpty()) {
-                    if (hasFilter) filterDesc.append(", ");
-                    filterDesc.append(category);
-                    hasFilter = true;
-                }
-
-                if (minAmount > 0 || maxAmount < 100000) {
-                    if (hasFilter) filterDesc.append(", ");
-                    filterDesc.append("Amount ₹").append((int)minAmount).append("-₹").append((int)maxAmount);
-                    hasFilter = true;
-                }
-
-                if (showExcluded) {
-                    if (hasFilter) filterDesc.append(", ");
-                    filterDesc.append("Including excluded");
-                }
-
-                filterIndicator.setText(filterDesc.toString());
-            } else {
-                filterIndicatorContainer.setVisibility(View.GONE);
-            }
-
-            if (resultCount != null) {
-                resultCount.setText(String.format(Locale.getDefault(),
-                        "%d transaction(s) found", adapter.getItemCount()));
-            }
-        }
-    }
-
-    private void updateTransactionsList() {
-        if (loadingIndicator != null) {
-            loadingIndicator.setVisibility(View.VISIBLE);
-        }
-
-        viewModel.getTransactionsBetweenDates(fromDate, toDate, transactions -> {
-            if (loadingIndicator != null) {
-                loadingIndicator.setVisibility(View.GONE);
-            }
-
-            if (transactions == null || transactions.isEmpty()) {
-                if (adapter != null) {
-                    adapter.setTransactions(new ArrayList<>());
-                }
-
-                updateSummary(new ArrayList<>());
-
-                // Show empty state
-                if (emptyStateText != null) {
-                    emptyStateText.setVisibility(View.VISIBLE);
-                }
-
-                return;
-            }
-
-            // Hide empty state
-            if (emptyStateText != null) {
-                emptyStateText.setVisibility(View.GONE);
-            }
-
-            adapter.setTransactions(transactions);
-            updateSummaryWithBudget(transactions, viewModel.getBudget().getValue());
-
-            // Save all transactions for search filtering
-            allTransactions = new ArrayList<>(transactions);
-        });
-    }
-
     public void updateSummary(List<Transaction> transactions) {
         double totalDebits = 0;
         double totalCredits = 0;
@@ -1851,6 +1444,10 @@ public class MainActivity extends AppCompatActivity {
                     alertCard.setVisibility(View.GONE);
                 }
             }
+        } else {
+            if (alertCard != null) {
+                alertCard.setVisibility(View.GONE);
+            }
         }
     }
 
@@ -1919,7 +1516,7 @@ public class MainActivity extends AppCompatActivity {
             updateDateButtonTexts();
             preferencesManager.saveSelectedDateRange(fromDate, toDate);
 
-            // Call refreshTransactions instead of resetPagination
+            // Refresh transactions with new date range
             refreshTransactions();
 
         }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH));
@@ -2057,23 +1654,52 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void refreshTransactions() {
-        // Reset filter state except for manually excluded view
+        // Clear existing filter state except for specific flags we want to maintain
         boolean wasViewingManuallyExcluded = currentFilterState.viewingManuallyExcluded;
-        currentFilterState = new FilterState();
-        currentFilterState.viewingManuallyExcluded = wasViewingManuallyExcluded;
+        String currentCategory = currentFilterState.category;
+        String currentSearch = currentFilterState.searchQuery;
 
-        // Clear existing data
-        allTransactions.clear();
-        if (adapter != null) {
-            adapter.clearTransactions();
-        }
+        // Create new filter state with preserved values
+        FilterState newFilterState = new FilterState();
+        newFilterState.viewingManuallyExcluded = wasViewingManuallyExcluded;
+        newFilterState.category = currentCategory;
+        newFilterState.searchQuery = currentSearch;
 
-        // Use smart loading strategy to load transactions
+        // Update current filter state
+        currentFilterState = newFilterState;
+
+        // Use the smart loading strategy to refresh data
         if (smartLoadingStrategy != null) {
-            smartLoadingStrategy.loadTransactionsForDateRange(fromDate, toDate);
+            smartLoadingStrategy.updateFilterState(currentFilterState);
+            smartLoadingStrategy.refreshData(fromDate, toDate);
         }
 
+        // Update spending chart
         setupSpendingChart();
+    }
+
+    // Helper method for filter indicator display
+    public void showFilterIndicator(String message, int resultCount) {
+        View filterContainer = findViewById(R.id.filterIndicatorContainer);
+        TextView filterText = findViewById(R.id.filterIndicator);
+        TextView resultCountText = findViewById(R.id.resultCount);
+
+        if (filterContainer == null || filterText == null) {
+            Log.e(TAG, "Filter indicator views not found!");
+            return;
+        }
+
+        filterContainer.setVisibility(View.VISIBLE);
+        filterText.setText(message);
+
+        if (resultCountText != null) {
+            if (resultCount >= 0) {
+                resultCountText.setText(String.format(Locale.getDefault(),
+                        "%d transaction(s) found", resultCount));
+            } else {
+                resultCountText.setText("Loading...");
+            }
+        }
     }
 
     private void checkAndRequestSMSPermissions() {
@@ -2140,8 +1766,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
 
+        // Set navigation selection
         BottomNavigationView bottomNav = findViewById(R.id.bottomNavigation);
-        bottomNav.setSelectedItemId(R.id.nav_home);
+        if (bottomNav != null) {
+            bottomNav.setSelectedItemId(R.id.nav_home);
+        }
 
         // If we're viewing manually excluded transactions, refresh that view
         if (currentFilterState.viewingManuallyExcluded) {
@@ -2170,10 +1799,9 @@ public class MainActivity extends AppCompatActivity {
         public double maxAmount = 100000;
         public boolean showingExcluded = false;
         public int sortOption = 0; // 0 = Date (newest first)
-        private boolean filterManuallyExcluded = false; // NEW PROPERTY
         public boolean viewingManuallyExcluded = false;
 
-        // Update the isAnyFilterActive method
+        // Method to check if any filter is active
         public boolean isAnyFilterActive() {
             return !bank.equals("All Banks") ||
                     !type.equals("All Types") ||
@@ -2181,102 +1809,8 @@ public class MainActivity extends AppCompatActivity {
                     !searchQuery.isEmpty() ||
                     minAmount > 0 ||
                     maxAmount < 100000 ||
-                    filterManuallyExcluded; // Include our new property here
-        }
-
-        // Update the applyFilters method to handle the new property
-        public List<Transaction> applyFilters(List<Transaction> transactions) {
-            if (transactions == null) return new ArrayList<>();
-
-            List<Transaction> result = new ArrayList<>();
-
-            for (Transaction transaction : transactions) {
-                boolean shouldInclude = true;
-
-                // Special case: If filtering manually excluded transactions
-                if (filterManuallyExcluded) {
-                    // Only include manually excluded transactions
-                    shouldInclude = transaction.isExcludedFromTotal() && !transaction.isOtherDebit();
-
-                    // No need to check other filters if this doesn't match
-                    if (!shouldInclude) {
-                        continue;
-                    }
-                }
-
-                // Apply bank filter
-                if (!bank.equals("All Banks") && !bank.equals(transaction.getBank())) {
-                    shouldInclude = false;
-                }
-
-                // Apply type filter
-                if (shouldInclude && !type.equals("All Types") && !type.equals(transaction.getType())) {
-                    shouldInclude = false;
-                }
-
-                // Apply category filter (only if not filtering for manually excluded)
-                if (shouldInclude && !filterManuallyExcluded && category != null && !category.isEmpty() &&
-                        !category.equals(transaction.getCategory())) {
-                    shouldInclude = false;
-                }
-
-                // Apply amount filter
-                if (shouldInclude && (transaction.getAmount() < minAmount ||
-                        transaction.getAmount() > maxAmount)) {
-                    shouldInclude = false;
-                }
-
-                // Apply exclusion filter (but skip this check if we're explicitly filtering for manually excluded)
-                if (shouldInclude && !filterManuallyExcluded && transaction.isExcludedFromTotal() && transaction.isOtherDebit() && !showingExcluded) {
-                    shouldInclude = false;
-                }
-
-                // Apply search query
-                if (shouldInclude && !searchQuery.isEmpty()) {
-                    boolean matchesSearch = false;
-                    String lowerQuery = searchQuery.toLowerCase();
-
-                    // Check description
-                    if (transaction.getDescription() != null &&
-                            transaction.getDescription().toLowerCase().contains(lowerQuery)) {
-                        matchesSearch = true;
-                    }
-
-                    // Check bank
-                    if (!matchesSearch && transaction.getBank() != null &&
-                            transaction.getBank().toLowerCase().contains(lowerQuery)) {
-                        matchesSearch = true;
-                    }
-
-                    // Check category
-                    if (!matchesSearch && transaction.getCategory() != null &&
-                            transaction.getCategory().toLowerCase().contains(lowerQuery)) {
-                        matchesSearch = true;
-                    }
-
-                    // Check merchant name
-                    if (!matchesSearch && transaction.getMerchantName() != null &&
-                            transaction.getMerchantName().toLowerCase().contains(lowerQuery)) {
-                        matchesSearch = true;
-                    }
-
-                    // Check amount
-                    if (!matchesSearch && String.valueOf(transaction.getAmount()).contains(lowerQuery)) {
-                        matchesSearch = true;
-                    }
-
-                    shouldInclude = matchesSearch;
-                }
-
-                if (shouldInclude) {
-                    result.add(transaction);
-                }
-            }
-
-            // Apply current sort option
-            sortTransactions(result, sortOption);
-
-            return result;
+                    showingExcluded ||
+                    viewingManuallyExcluded;
         }
     }
 
@@ -2294,125 +1828,5 @@ public class MainActivity extends AppCompatActivity {
      */
     public long getToDate() {
         return toDate;
-    }
-
-    /**
-     * Show dialog to choose grouping mode
-     */
-    private void showGroupingModeSelector() {
-        // Get the current view mode and grouping mode
-        boolean isGroupView = currentViewMode != ViewMode.LIST;
-        int currentGroupingMode = 0; // Default to day grouping
-
-        // Get grouping mode from SmartLoadingStrategy if available
-        if (smartLoadingStrategy != null) {
-            currentGroupingMode = smartLoadingStrategy.getGroupingMode();
-        }
-
-        // Create bottom sheet dialog
-        BottomSheetDialog dialog = new BottomSheetDialog(this);
-        View dialogView = getLayoutInflater().inflate(R.layout.group_mode_selector, null);
-        dialog.setContentView(dialogView);
-
-        // Get radio group and buttons
-        RadioGroup radioGroup = dialogView.findViewById(R.id.viewModeRadioGroup);
-        RadioButton listViewRadio = dialogView.findViewById(R.id.listViewRadio);
-        RadioButton dayGroupRadio = dialogView.findViewById(R.id.dayGroupRadio);
-        RadioButton weekGroupRadio = dialogView.findViewById(R.id.weekGroupRadio);
-        RadioButton monthGroupRadio = dialogView.findViewById(R.id.monthGroupRadio);
-
-        // Set initial selection based on current view mode
-        if (!isGroupView) {
-            listViewRadio.setChecked(true);
-        } else {
-            switch (currentGroupingMode) {
-                case 0: // Day grouping
-                    dayGroupRadio.setChecked(true);
-                    break;
-                case 1: // Week grouping
-                    weekGroupRadio.setChecked(true);
-                    break;
-                case 2: // Month grouping
-                    monthGroupRadio.setChecked(true);
-                    break;
-            }
-        }
-
-        // Set radio button change listener
-        radioGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            if (checkedId == listViewRadio.getId()) {
-                // Switch to list view
-                updateViewMode(ViewMode.LIST);
-                // Save preference
-                preferencesManager.saveViewMode(false);
-            } else {
-                // Determine grouping mode based on selected radio button
-                int groupingMode = 0; // Default to day grouping
-                ViewMode newViewMode = ViewMode.GROUP_BY_DAY;
-
-                if (checkedId == weekGroupRadio.getId()) {
-                    groupingMode = 1;
-                    newViewMode = ViewMode.GROUP_BY_WEEK;
-                } else if (checkedId == monthGroupRadio.getId()) {
-                    groupingMode = 2;
-                    newViewMode = ViewMode.GROUP_BY_MONTH;
-                }
-
-                // Update view mode and grouping mode
-                currentViewMode = newViewMode;
-                if (smartLoadingStrategy != null) {
-                    smartLoadingStrategy.setGroupingMode(groupingMode);
-                    smartLoadingStrategy.setForceViewMode(true);
-                }
-
-                // Save preferences
-                preferencesManager.saveViewMode(true);
-                preferencesManager.saveGroupingMode(groupingMode);
-
-                // Update UI
-                updateViewModeButtonAppearance();
-            }
-
-            dialog.dismiss();
-        });
-
-        dialog.show();
-    }
-
-    /**
-     * Update the current view mode
-     */
-    private void updateViewMode(ViewMode viewMode) {
-        // Only process if we're actually changing the mode
-        if (currentViewMode == viewMode) {
-            return; // No change needed
-        }
-
-        currentViewMode = viewMode;
-
-        // Update button appearance
-        updateViewModeButtonAppearance();
-
-        // Update SmartLoadingStrategy
-        if (smartLoadingStrategy != null) {
-            boolean isGroupView = viewMode != ViewMode.LIST;
-            smartLoadingStrategy.setForceViewMode(isGroupView);
-
-            // Set appropriate grouping mode based on view mode
-            if (isGroupView) {
-                int groupingMode = 0; // Default to day grouping
-
-                if (viewMode == ViewMode.GROUP_BY_WEEK) {
-                    groupingMode = 1;
-                } else if (viewMode == ViewMode.GROUP_BY_MONTH) {
-                    groupingMode = 2;
-                }
-
-                smartLoadingStrategy.setGroupingMode(groupingMode);
-            }
-
-            // Reload data
-            refreshTransactions();
-        }
     }
 }
