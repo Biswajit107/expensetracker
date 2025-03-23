@@ -420,6 +420,7 @@ public class SmartLoadingStrategy {
     }
 
     // Update filter indicator in MainActivity
+    // Update in SmartLoadingStrategy.java
     private void updateFilterIndicator(List<Transaction> transactions) {
         if (context instanceof MainActivity) {
             MainActivity activity = (MainActivity) context;
@@ -428,19 +429,18 @@ public class SmartLoadingStrategy {
             TextView countText = activity.findViewById(R.id.resultCount);
 
             if (filterContainer != null && filterText != null) {
+                // Build filter description
+                StringBuilder desc = new StringBuilder();
+                boolean hasInfo = false;
+
+                // Add manually excluded filter text
                 if (currentFilterState.viewingManuallyExcluded) {
-                    filterContainer.setVisibility(View.VISIBLE);
-                    filterText.setText("Viewing: Manually Excluded Transactions");
-
-                    if (countText != null && transactions != null) {
-                        countText.setText(String.format(Locale.getDefault(),
-                                "%d transaction(s) found", transactions.size()));
-                    }
-                } else if (currentFilterState.isAnyFilterActive()) {
-                    filterContainer.setVisibility(View.VISIBLE);
-
-                    // Build filter description
-                    StringBuilder desc = new StringBuilder("Filtered by: ");
+                    desc.append("Viewing: Manually Excluded Transactions");
+                    hasInfo = true;
+                }
+                // Add regular filter info
+                else if (currentFilterState.isAnyFilterActive()) {
+                    desc.append("Filtered by: ");
                     boolean hasFilter = false;
 
                     if (!"All Banks".equals(currentFilterState.bank)) {
@@ -463,8 +463,49 @@ public class SmartLoadingStrategy {
                     if (!currentFilterState.searchQuery.isEmpty()) {
                         if (hasFilter) desc.append(", ");
                         desc.append("Search: ").append(currentFilterState.searchQuery);
+                        hasFilter = true;
                     }
 
+                    if (hasFilter) {
+                        hasInfo = true;
+                    }
+                }
+
+                // Add sort information if not default sort
+                if (currentFilterState.sortOption != 0) {
+                    String sortText = "Sorted by: ";
+                    switch (currentFilterState.sortOption) {
+                        case 0:
+                            sortText += "Date (newest first)";
+                            break;
+                        case 1:
+                            sortText += "Date (oldest first)";
+                            break;
+                        case 2:
+                            sortText += "Amount (highest first)";
+                            break;
+                        case 3:
+                            sortText += "Amount (lowest first)";
+                            break;
+                        case 4:
+                            sortText += "Description (A-Z)";
+                            break;
+                        case 5:
+                            sortText += "Description (Z-A)";
+                            break;
+                    }
+
+                    if (hasInfo) {
+                        desc.append(", ").append(sortText);
+                    } else {
+                        desc.append(sortText);
+                        hasInfo = true;
+                    }
+                }
+
+                // Show or hide the filter container based on whether we have info to display
+                if (hasInfo) {
+                    filterContainer.setVisibility(View.VISIBLE);
                     filterText.setText(desc.toString());
 
                     if (countText != null && transactions != null) {
