@@ -10,6 +10,7 @@ import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
 import androidx.lifecycle.ViewModelProvider;
@@ -146,7 +147,6 @@ public class MainActivity extends AppCompatActivity {
         setupDateRangeChips();
         setupCategoryFilter();
         setupBudgetFab();
-//        setupSearch();
         setupSort();
         setupExpandableSearch();
 
@@ -572,30 +572,13 @@ public class MainActivity extends AppCompatActivity {
         dialog.show(getSupportFragmentManager(), "edit_transaction");
     }
 
-    private void setupSearch() {
-        if (searchInput == null) return;
-
-        searchInput.addTextChangedListener(new TextWatcher() {
-            @Override
-            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {}
-
-            @Override
-            public void afterTextChanged(Editable s) {
-                filterTransactions(s.toString());
-            }
-        });
-    }
-
     /**
      * Set up the expandable search functionality with animations
      */
     private void setupExpandableSearch() {
         // Find views
         View collapsedSearchView = findViewById(R.id.collapsedSearchView);
-        View expandedSearchView = findViewById(R.id.expandedSearchView);
+        MaterialCardView expandedSearchView = findViewById(R.id.expandedSearchView);
         EditText searchInput = findViewById(R.id.searchInput);
         ImageButton clearSearchButton = findViewById(R.id.clearSearchButton);
 
@@ -609,8 +592,8 @@ public class MainActivity extends AppCompatActivity {
         Animation slideInRight = AnimationUtils.loadAnimation(this, R.anim.slide_in_right);
         Animation slideOutLeft = AnimationUtils.loadAnimation(this, R.anim.slide_out_left);
 
-        // Click listener for the collapsed search icon
-        collapsedSearchView.setOnClickListener(v -> {
+        // Helper method to expand search
+        View.OnClickListener expandSearchListener = v -> {
             // Hide collapsed view with animation
             collapsedSearchView.startAnimation(fadeOut);
             collapsedSearchView.setVisibility(View.GONE);
@@ -632,7 +615,19 @@ public class MainActivity extends AppCompatActivity {
 
             // Keep filter button but remove text
             filterButton.setText("");
-        });
+        };
+
+        // Click listener for the collapsed search icon
+        collapsedSearchView.setOnClickListener(expandSearchListener);
+
+        // NEW: Also make the expanded search view's search icon clickable to collapse
+        ImageView expandedSearchIcon = expandedSearchView.findViewById(R.id.expandedSearchIcon);
+        if (expandedSearchIcon != null) {
+            expandedSearchIcon.setOnClickListener(v -> {
+                // Collapse search regardless of text content
+                collapseSearch(fadeIn, slideOutLeft, true);
+            });
+        }
 
         // Set up clear button for search
         searchInput.addTextChangedListener(new TextWatcher() {
@@ -663,13 +658,16 @@ public class MainActivity extends AppCompatActivity {
             searchInput.setText("");
             clearSearchButton.startAnimation(fadeOut);
             clearSearchButton.setVisibility(View.GONE);
+
+            // Also collapse search when text is cleared
+            collapseSearch(fadeIn, slideOutLeft, true);
         });
 
         // Handle back button to collapse search
         searchInput.setOnKeyListener((v, keyCode, event) -> {
             if (keyCode == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
                 // Collapse search
-                collapseSearch(fadeIn, slideOutLeft);
+                collapseSearch(fadeIn, slideOutLeft, true);
                 return true;
             }
             return false;
@@ -678,17 +676,18 @@ public class MainActivity extends AppCompatActivity {
         // Focus change listener to collapse search when focus is lost
         searchInput.setOnFocusChangeListener((v, hasFocus) -> {
             if (!hasFocus && searchInput.getText().toString().isEmpty()) {
-                collapseSearch(fadeIn, slideOutLeft);
+                collapseSearch(fadeIn, slideOutLeft, false);
             }
         });
     }
 
     /**
      * Collapse the search view with animations
+     * @param forceCollapse When true, collapse even if there's search text
      */
-    private void collapseSearch(Animation fadeIn, Animation slideOutLeft) {
+    private void collapseSearch(Animation fadeIn, Animation slideOutLeft, boolean forceCollapse) {
         View collapsedSearchView = findViewById(R.id.collapsedSearchView);
-        View expandedSearchView = findViewById(R.id.expandedSearchView);
+        MaterialCardView expandedSearchView = findViewById(R.id.expandedSearchView);
         EditText searchInput = findViewById(R.id.searchInput);
         MaterialButton viewModeButton = findViewById(R.id.viewModeButton);
         MaterialButton filterButton = findViewById(R.id.filterButton);
@@ -697,8 +696,8 @@ public class MainActivity extends AppCompatActivity {
         InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
 
-        // Only collapse if there's no search text
-        if (searchInput.getText().toString().isEmpty()) {
+        // Only collapse if there's no search text or if forced
+        if (searchInput.getText().toString().isEmpty() || forceCollapse) {
             // Hide expanded view with animation
             expandedSearchView.startAnimation(slideOutLeft);
             expandedSearchView.setVisibility(View.GONE);
