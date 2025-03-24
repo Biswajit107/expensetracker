@@ -997,6 +997,7 @@ public class MainActivity extends AppCompatActivity {
                 // Clear any previous chip selections if this was unselected
                 if (!((Chip)v).isChecked()) {
                     dateRangeChipGroup.clearCheck();
+                    setDateRangeThisMonth();
                 }
             });
         }
@@ -1007,6 +1008,7 @@ public class MainActivity extends AppCompatActivity {
                 setDateRangeYesterday();
                 if (!((Chip)v).isChecked()) {
                     dateRangeChipGroup.clearCheck();
+                    setDateRangeThisMonth();
                 }
             });
         }
@@ -1017,6 +1019,7 @@ public class MainActivity extends AppCompatActivity {
                 setDateRangeThisWeek();
                 if (!((Chip)v).isChecked()) {
                     dateRangeChipGroup.clearCheck();
+                    setDateRangeThisMonth();
                 }
             });
         }
@@ -1037,6 +1040,7 @@ public class MainActivity extends AppCompatActivity {
                 setDateRangeLast3Months();
                 if (!((Chip)v).isChecked()) {
                     dateRangeChipGroup.clearCheck();
+                    setDateRangeThisMonth();
                 }
             });
         }
