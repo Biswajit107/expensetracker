@@ -785,6 +785,9 @@ public class MainActivity extends AppCompatActivity {
             Log.d(TAG, "Category filter chip group not found in layout");
             return;
         }
+        // Configure the ChipGroup
+        categoryFilterChipGroup.setSelectionRequired(false); // Allow deselection
+        categoryFilterChipGroup.setSingleSelection(true);    // Only one chip can be selected
 
         // Clear any existing chips
         categoryFilterChipGroup.removeAllViews();
@@ -830,20 +833,8 @@ public class MainActivity extends AppCompatActivity {
         categoryFilterChipGroup.setOnCheckedChangeListener((group, checkedId) -> {
             // Find which chip is selected
             if (checkedId == View.NO_ID) {
-                // No chip selected, show all categories
-                currentFilterState.viewingManuallyExcluded = false;
-                currentFilterState.category = null;
-
-                // Hide filter indicator
-                if (filterIndicatorContainer != null) {
-                    filterIndicatorContainer.setVisibility(View.GONE);
-                }
-
-                // Reload data without filters
-                if (smartLoadingStrategy != null) {
-                    smartLoadingStrategy.updateFilterState(currentFilterState);
-                    smartLoadingStrategy.refreshData(fromDate, toDate);
-                }
+                // No chip selected, clear filter
+                clearCategoryFilter();
                 return;
             }
 
@@ -851,21 +842,9 @@ public class MainActivity extends AppCompatActivity {
             if (selectedChip != null) {
                 String selectedCategory = selectedChip.getText().toString();
 
-                // If "All Categories" is selected, don't filter by category
+                // If "All Categories" is selected, clear the category filter
                 if ("All Categories".equals(selectedCategory)) {
-                    currentFilterState.viewingManuallyExcluded = false;
-                    currentFilterState.category = null;
-
-                    // Hide filter if no other filters active
-                    if (!currentFilterState.isAnyFilterActive() && filterIndicatorContainer != null) {
-                        filterIndicatorContainer.setVisibility(View.GONE);
-                    }
-
-                    // Reload without category filter
-                    if (smartLoadingStrategy != null) {
-                        smartLoadingStrategy.updateFilterState(currentFilterState);
-                        smartLoadingStrategy.refreshData(fromDate, toDate);
-                    }
+                    clearCategoryFilter();
                 }
                 // Special handling for "Manually Excluded" filter
                 else if ("Manually Excluded".equals(selectedCategory)) {
@@ -905,9 +884,10 @@ public class MainActivity extends AppCompatActivity {
         currentFilterState.category = category;
         currentFilterState.viewingManuallyExcluded = false;
 
-        // Show filter indicator
+        // Show or hide filter indicator based on category
         if (filterIndicatorContainer != null) {
             if (category != null && !category.isEmpty()) {
+                // Show filter indicator with category info
                 filterIndicatorContainer.setVisibility(View.VISIBLE);
                 filterIndicator.setText("Filtered by category: " + category);
 
@@ -915,11 +895,51 @@ public class MainActivity extends AppCompatActivity {
                     resultCount.setText("Loading...");
                 }
             } else if (!currentFilterState.isAnyFilterActive()) {
+                // Hide filter indicator if no other filters are active
                 filterIndicatorContainer.setVisibility(View.GONE);
             }
         }
 
         // Use smart loading strategy to load filtered data
+        if (smartLoadingStrategy != null) {
+            smartLoadingStrategy.updateFilterState(currentFilterState);
+            smartLoadingStrategy.refreshData(fromDate, toDate);
+        }
+    }
+
+    private void clearCategoryFilter() {
+        // Reset category-related filter state
+        currentFilterState.category = null;
+        currentFilterState.viewingManuallyExcluded = false;
+
+        // Update UI if needed
+        if (!currentFilterState.isAnyFilterActive() && filterIndicatorContainer != null) {
+            filterIndicatorContainer.setVisibility(View.GONE);
+        } else if (filterIndicatorContainer != null && filterIndicatorContainer.getVisibility() == View.VISIBLE) {
+            // Update filter indicator text if other filters are still active
+            StringBuilder filterDesc = new StringBuilder("Filtered by: ");
+            boolean hasFilter = false;
+
+            if (!"All Banks".equals(currentFilterState.bank)) {
+                filterDesc.append(currentFilterState.bank);
+                hasFilter = true;
+            }
+
+            if (!"All Types".equals(currentFilterState.type)) {
+                if (hasFilter) filterDesc.append(", ");
+                filterDesc.append(currentFilterState.type);
+                hasFilter = true;
+            }
+
+            if (!currentFilterState.searchQuery.isEmpty()) {
+                if (hasFilter) filterDesc.append(", ");
+                filterDesc.append("Search: ").append(currentFilterState.searchQuery);
+            }
+
+            filterIndicator.setText(filterDesc.toString());
+        }
+
+        // Refresh data
         if (smartLoadingStrategy != null) {
             smartLoadingStrategy.updateFilterState(currentFilterState);
             smartLoadingStrategy.refreshData(fromDate, toDate);
