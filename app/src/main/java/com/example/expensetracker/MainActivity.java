@@ -11,6 +11,7 @@ import android.view.animation.AnimationUtils;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
 import androidx.lifecycle.ViewModelProvider;
@@ -48,6 +49,7 @@ import com.example.expensetracker.database.TransactionDatabase;
 import com.example.expensetracker.dialogs.TransactionEditDialog;
 import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.receivers.EnhancedSMSReceiver;
+import com.example.expensetracker.ui.ChartMarkerView;
 import com.example.expensetracker.utils.SmartLoadingStrategy;
 import com.example.expensetracker.viewmodel.TransactionViewModel;
 import com.example.expensetracker.utils.PreferencesManager;
@@ -144,6 +146,8 @@ public class MainActivity extends AppCompatActivity {
 
         // Set up components
         setupSpendingChart();
+        setupCollapsibleSpendingChart();
+
         setupDateRangeChips();
         setupCategoryFilter();
         setupBudgetFab();
@@ -1283,6 +1287,61 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
+    private void setupCollapsibleSpendingChart() {
+        // Find the card and chart views
+        MaterialCardView spendingChartCard = findViewById(R.id.spendingChartCard);
+        LineChart spendingLineChart = findViewById(R.id.spendingLineChart);
+
+        // Need to add a header layout with a title and toggle button
+        LinearLayout chartHeader = findViewById(R.id.chartHeaderLayout);
+        ImageView toggleIcon = findViewById(R.id.chartToggleIcon);
+
+        // Get saved state from preferences
+        boolean isExpanded = preferencesManager.isChartExpanded();
+
+        // Initialize visibility based on saved state
+        spendingLineChart.setVisibility(isExpanded ? View.VISIBLE : View.GONE);
+        toggleIcon.setImageResource(isExpanded ? R.drawable.ic_expand_less : R.drawable.ic_expand_more);
+
+        // Load animations
+        Animation slideIn = AnimationUtils.loadAnimation(this, R.anim.slide_down);
+        Animation slideOut = AnimationUtils.loadAnimation(this, R.anim.slide_up);
+
+        // Set click listener on the header to toggle chart visibility
+        chartHeader.setOnClickListener(v -> {
+            boolean willBeExpanded = spendingLineChart.getVisibility() != View.VISIBLE;
+
+            if (!willBeExpanded) {
+                // Collapse the chart with animation
+                spendingLineChart.startAnimation(slideOut);
+                slideOut.setAnimationListener(new Animation.AnimationListener() {
+                    @Override
+                    public void onAnimationStart(Animation animation) {}
+
+                    @Override
+                    public void onAnimationEnd(Animation animation) {
+                        spendingLineChart.setVisibility(View.GONE);
+                    }
+
+                    @Override
+                    public void onAnimationRepeat(Animation animation) {}
+                });
+                toggleIcon.setImageResource(R.drawable.ic_expand_more);
+            } else {
+                // Expand the chart with animation
+                spendingLineChart.setVisibility(View.VISIBLE);
+                spendingLineChart.startAnimation(slideIn);
+                toggleIcon.setImageResource(R.drawable.ic_expand_less);
+
+                // Refresh chart data when expanding
+                updateSpendingChart();
+            }
+
+            // Save the new state
+            preferencesManager.saveChartExpandedState(willBeExpanded);
+        });
+    }
+
     private void showAdvancedFilterDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_advanced_filter, null);
@@ -1571,6 +1630,11 @@ public class MainActivity extends AppCompatActivity {
                 dataSet.setDrawValues(false);
                 dataSet.setMode(LineDataSet.Mode.CUBIC_BEZIER); // Smooth curve
 
+                // Make the data points clickable
+                dataSet.setHighlightEnabled(true);
+                dataSet.setDrawHighlightIndicators(true);
+                dataSet.setHighLightColor(getColor(R.color.primary));
+
                 // Enable fill color
                 dataSet.setDrawFilled(true);
                 dataSet.setFillColor(getColor(R.color.primary));
@@ -1583,6 +1647,17 @@ public class MainActivity extends AppCompatActivity {
                 XAxis xAxis = spendingLineChart.getXAxis();
                 xAxis.setValueFormatter(new IndexAxisValueFormatter(dateLabels));
                 xAxis.setLabelCount(Math.min(dateLabels.size(), 5));
+
+                // Configure chart interaction
+                spendingLineChart.setTouchEnabled(true);
+                spendingLineChart.setDragEnabled(true);
+                spendingLineChart.setScaleEnabled(true);
+                spendingLineChart.setPinchZoom(true);
+
+                // Create and set custom marker view
+                ChartMarkerView markerView = new ChartMarkerView(this, R.layout.chart_marker_view, dateLabels);
+                markerView.setChartView(spendingLineChart);
+                spendingLineChart.setMarker(markerView);
 
                 // Refresh chart
                 spendingLineChart.invalidate();

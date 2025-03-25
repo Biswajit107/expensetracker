@@ -18,6 +18,9 @@ public class PreferencesManager {
     private static final String KEY_FROM_DATE = "from_date";
     private static final String KEY_TO_DATE = "to_date";
 
+
+    private static final String KEY_CHART_EXPANDED = "chart_expanded";
+
     private SharedPreferences prefs;
 
     public PreferencesManager(Context context) {
@@ -122,5 +125,21 @@ public class PreferencesManager {
      */
     public int getSortOption() {
         return prefs.getInt(KEY_SORT_OPTION, 0); // Default to date newest first
+    }
+
+    /**
+     * Save the expanded state of the spending chart
+     * @param expanded Whether the chart is expanded
+     */
+    public void saveChartExpandedState(boolean expanded) {
+        prefs.edit().putBoolean(KEY_CHART_EXPANDED, expanded).apply();
+    }
+
+    /**
+     * Get the saved expanded state of the spending chart
+     * @return Whether the chart should be expanded, defaults to true
+     */
+    public boolean isChartExpanded() {
+        return prefs.getBoolean(KEY_CHART_EXPANDED, false); // Default to expanded
     }
 }
