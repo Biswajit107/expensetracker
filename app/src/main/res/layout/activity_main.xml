@@ -249,22 +249,26 @@
                 app:cardCornerRadius="8dp"
                 app:cardElevation="2dp">
 
+                <!-- Two-row chart header layout for better spacing -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical">
 
-                    <!-- Clickable header with title and toggle icon -->
+                    <!-- Chart Title and Expand/Collapse - First Row -->
                     <LinearLayout
                         android:id="@+id/chartHeaderLayout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
-                        android:padding="16dp"
+                        android:paddingHorizontal="16dp"
+                        android:paddingTop="16dp"
+                        android:paddingBottom="8dp"
                         android:gravity="center_vertical"
                         android:background="?attr/selectableItemBackground">
 
                         <TextView
+                            android:id="@+id/chartTitleText"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
@@ -276,7 +280,34 @@
                             android:id="@+id/chartToggleIcon"
                             android:layout_width="24dp"
                             android:layout_height="24dp"
+                            android:layout_marginStart="8dp"
                             android:src="@drawable/ic_expand_less"/>
+                    </LinearLayout>
+
+                    <!-- Month Selector - Second Row (initially hidden) -->
+                    <LinearLayout
+                        android:id="@+id/monthSelectorLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="16dp"
+                        android:paddingBottom="8dp"
+                        android:gravity="start|center_vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Month: "
+                            android:textSize="14sp"
+                            android:layout_marginEnd="4dp"/>
+
+                        <Spinner
+                            android:id="@+id/monthSpinner"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="180dp"
+                            android:backgroundTint="@color/primary" />
                     </LinearLayout>
 
                     <!-- Horizontal divider -->

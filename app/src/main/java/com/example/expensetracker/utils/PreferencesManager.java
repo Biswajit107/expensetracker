@@ -21,6 +21,9 @@ public class PreferencesManager {
 
     private static final String KEY_CHART_EXPANDED = "chart_expanded";
 
+    private static final String KEY_SELECTED_CHART_YEAR = "selected_chart_year";
+    private static final String KEY_SELECTED_CHART_MONTH = "selected_chart_month";
+
     private SharedPreferences prefs;
 
     public PreferencesManager(Context context) {
@@ -141,5 +144,51 @@ public class PreferencesManager {
      */
     public boolean isChartExpanded() {
         return prefs.getBoolean(KEY_CHART_EXPANDED, false); // Default to expanded
+    }
+
+    /**
+     * Save the selected month for the spending chart
+     * @param year The selected year
+     * @param month The selected month (0-11)
+     */
+    public void saveChartMonthSelection(int year, int month) {
+        prefs.edit()
+                .putInt(KEY_SELECTED_CHART_YEAR, year)
+                .putInt(KEY_SELECTED_CHART_MONTH, month)
+                .apply();
+    }
+
+    /**
+     * Get the saved year for chart month selection
+     * @return The selected year or 0 if not set (0 indicates "All Months")
+     */
+    public int getSelectedChartYear() {
+        return prefs.getInt(KEY_SELECTED_CHART_YEAR, 0);
+    }
+
+    /**
+     * Get the saved month for chart month selection
+     * @return The selected month (0-11) or 0 if not set
+     */
+    public int getSelectedChartMonth() {
+        return prefs.getInt(KEY_SELECTED_CHART_MONTH, 0);
+    }
+
+    /**
+     * Check if a specific month is selected for the chart
+     * @return true if a month is selected, false for "All Months"
+     */
+    public boolean hasSelectedChartMonth() {
+        return getSelectedChartYear() > 0;
+    }
+
+    /**
+     * Clear any saved month selection (revert to "All Months")
+     */
+    public void clearChartMonthSelection() {
+        prefs.edit()
+                .remove(KEY_SELECTED_CHART_YEAR)
+                .remove(KEY_SELECTED_CHART_MONTH)
+                .apply();
     }
 }

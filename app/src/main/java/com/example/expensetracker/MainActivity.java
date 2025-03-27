@@ -9,6 +9,7 @@ import android.view.KeyEvent;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.AdapterView;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -40,6 +41,7 @@ import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -1287,60 +1289,60 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
-    private void setupCollapsibleSpendingChart() {
-        // Find the card and chart views
-        MaterialCardView spendingChartCard = findViewById(R.id.spendingChartCard);
-        LineChart spendingLineChart = findViewById(R.id.spendingLineChart);
-
-        // Need to add a header layout with a title and toggle button
-        LinearLayout chartHeader = findViewById(R.id.chartHeaderLayout);
-        ImageView toggleIcon = findViewById(R.id.chartToggleIcon);
-
-        // Get saved state from preferences
-        boolean isExpanded = preferencesManager.isChartExpanded();
-
-        // Initialize visibility based on saved state
-        spendingLineChart.setVisibility(isExpanded ? View.VISIBLE : View.GONE);
-        toggleIcon.setImageResource(isExpanded ? R.drawable.ic_expand_less : R.drawable.ic_expand_more);
-
-        // Load animations
-        Animation slideIn = AnimationUtils.loadAnimation(this, R.anim.slide_down);
-        Animation slideOut = AnimationUtils.loadAnimation(this, R.anim.slide_up);
-
-        // Set click listener on the header to toggle chart visibility
-        chartHeader.setOnClickListener(v -> {
-            boolean willBeExpanded = spendingLineChart.getVisibility() != View.VISIBLE;
-
-            if (!willBeExpanded) {
-                // Collapse the chart with animation
-                spendingLineChart.startAnimation(slideOut);
-                slideOut.setAnimationListener(new Animation.AnimationListener() {
-                    @Override
-                    public void onAnimationStart(Animation animation) {}
-
-                    @Override
-                    public void onAnimationEnd(Animation animation) {
-                        spendingLineChart.setVisibility(View.GONE);
-                    }
-
-                    @Override
-                    public void onAnimationRepeat(Animation animation) {}
-                });
-                toggleIcon.setImageResource(R.drawable.ic_expand_more);
-            } else {
-                // Expand the chart with animation
-                spendingLineChart.setVisibility(View.VISIBLE);
-                spendingLineChart.startAnimation(slideIn);
-                toggleIcon.setImageResource(R.drawable.ic_expand_less);
-
-                // Refresh chart data when expanding
-                updateSpendingChart();
-            }
-
-            // Save the new state
-            preferencesManager.saveChartExpandedState(willBeExpanded);
-        });
-    }
+//    private void setupCollapsibleSpendingChart() {
+//        // Find the card and chart views
+//        MaterialCardView spendingChartCard = findViewById(R.id.spendingChartCard);
+//        LineChart spendingLineChart = findViewById(R.id.spendingLineChart);
+//
+//        // Need to add a header layout with a title and toggle button
+//        LinearLayout chartHeader = findViewById(R.id.chartHeaderLayout);
+//        ImageView toggleIcon = findViewById(R.id.chartToggleIcon);
+//
+//        // Get saved state from preferences
+//        boolean isExpanded = preferencesManager.isChartExpanded();
+//
+//        // Initialize visibility based on saved state
+//        spendingLineChart.setVisibility(isExpanded ? View.VISIBLE : View.GONE);
+//        toggleIcon.setImageResource(isExpanded ? R.drawable.ic_expand_less : R.drawable.ic_expand_more);
+//
+//        // Load animations
+//        Animation slideIn = AnimationUtils.loadAnimation(this, R.anim.slide_down);
+//        Animation slideOut = AnimationUtils.loadAnimation(this, R.anim.slide_up);
+//
+//        // Set click listener on the header to toggle chart visibility
+//        chartHeader.setOnClickListener(v -> {
+//            boolean willBeExpanded = spendingLineChart.getVisibility() != View.VISIBLE;
+//
+//            if (!willBeExpanded) {
+//                // Collapse the chart with animation
+//                spendingLineChart.startAnimation(slideOut);
+//                slideOut.setAnimationListener(new Animation.AnimationListener() {
+//                    @Override
+//                    public void onAnimationStart(Animation animation) {}
+//
+//                    @Override
+//                    public void onAnimationEnd(Animation animation) {
+//                        spendingLineChart.setVisibility(View.GONE);
+//                    }
+//
+//                    @Override
+//                    public void onAnimationRepeat(Animation animation) {}
+//                });
+//                toggleIcon.setImageResource(R.drawable.ic_expand_more);
+//            } else {
+//                // Expand the chart with animation
+//                spendingLineChart.setVisibility(View.VISIBLE);
+//                spendingLineChart.startAnimation(slideIn);
+//                toggleIcon.setImageResource(R.drawable.ic_expand_less);
+//
+//                // Refresh chart data when expanding
+//                updateSpendingChart();
+//            }
+//
+//            // Save the new state
+//            preferencesManager.saveChartExpandedState(willBeExpanded);
+//        });
+//    }
 
     private void showAdvancedFilterDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
@@ -1525,6 +1527,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // Update the setupSpendingChart method in MainActivity.java
     private void setupSpendingChart() {
         LineChart spendingLineChart = findViewById(R.id.spendingLineChart);
         if (spendingLineChart == null) {
@@ -1550,24 +1553,235 @@ public class MainActivity extends AppCompatActivity {
         spendingLineChart.setDragEnabled(true);
         spendingLineChart.setScaleEnabled(true);
 
+        // Set custom "no data" text and appearance
+        spendingLineChart.setNoDataText("No spending data available");
+        spendingLineChart.setNoDataTextColor(getColor(R.color.text_secondary));
+
         // Load data for the chart
         updateSpendingChart();
+
+        // Add month selector if date range is long
+        setupMonthSelector();
     }
 
+    // Make sure setupCollapsibleSpendingChart method is properly maintained
+    private void setupCollapsibleSpendingChart() {
+        // Find the card and chart views
+        MaterialCardView spendingChartCard = findViewById(R.id.spendingChartCard);
+        LineChart spendingLineChart = findViewById(R.id.spendingLineChart);
+
+        // Need to add a header layout with a title and toggle button
+        LinearLayout chartHeader = findViewById(R.id.chartHeaderLayout);
+        ImageView toggleIcon = findViewById(R.id.chartToggleIcon);
+
+        if (chartHeader == null || toggleIcon == null) {
+            Log.e(TAG, "Chart header elements not found in layout");
+            return;
+        }
+
+        // Get saved state from preferences
+        boolean isExpanded = preferencesManager.isChartExpanded();
+
+        // Initialize visibility based on saved state
+        if (spendingLineChart != null) {
+            spendingLineChart.setVisibility(isExpanded ? View.VISIBLE : View.GONE);
+        }
+        if (toggleIcon != null) {
+            toggleIcon.setImageResource(isExpanded ? R.drawable.ic_expand_less : R.drawable.ic_expand_more);
+        }
+
+        // Load animations
+        Animation slideIn = AnimationUtils.loadAnimation(this, R.anim.slide_down);
+        Animation slideOut = AnimationUtils.loadAnimation(this, R.anim.slide_up);
+
+        // Set click listener on the header to toggle chart visibility
+        chartHeader.setOnClickListener(v -> {
+            if (spendingLineChart == null) return;
+
+            boolean willBeExpanded = spendingLineChart.getVisibility() != View.VISIBLE;
+
+            if (!willBeExpanded) {
+                // Collapse the chart with animation
+                spendingLineChart.startAnimation(slideOut);
+                slideOut.setAnimationListener(new Animation.AnimationListener() {
+                    @Override
+                    public void onAnimationStart(Animation animation) {}
+
+                    @Override
+                    public void onAnimationEnd(Animation animation) {
+                        spendingLineChart.setVisibility(View.GONE);
+                    }
+
+                    @Override
+                    public void onAnimationRepeat(Animation animation) {}
+                });
+                if (toggleIcon != null) {
+                    toggleIcon.setImageResource(R.drawable.ic_expand_more);
+                }
+            } else {
+                // Expand the chart with animation
+                spendingLineChart.setVisibility(View.VISIBLE);
+                spendingLineChart.startAnimation(slideIn);
+                if (toggleIcon != null) {
+                    toggleIcon.setImageResource(R.drawable.ic_expand_less);
+                }
+
+                // Refresh chart data when expanding
+                updateSpendingChart();
+            }
+
+            // Save the new state
+            preferencesManager.saveChartExpandedState(willBeExpanded);
+        });
+    }
+
+    // Add this method to MainActivity.java
+    // Update this method in MainActivity.java to include preferences
+    private void setupMonthSelector() {
+        // Calculate date range duration in days
+        long dateRangeDurationMillis = toDate - fromDate;
+        long dateRangeDays = dateRangeDurationMillis / (24 * 60 * 60 * 1000);
+
+        // Get references to the month selector components
+        LinearLayout monthSelectorLayout = findViewById(R.id.monthSelectorLayout);
+        Spinner monthSpinner = findViewById(R.id.monthSpinner);
+
+        // Only show month selector if date range is more than 30 days
+        if (dateRangeDays > 30 && monthSelectorLayout != null && monthSpinner != null) {
+            // Make month selector visible
+            monthSelectorLayout.setVisibility(View.VISIBLE);
+
+            // Prepare months list from the date range
+            List<MonthOption> monthOptions = generateMonthOptions(fromDate, toDate);
+
+            // Add "All Months" option
+            monthOptions.add(0, new MonthOption(0, 0, "All Months"));
+
+            // Create adapter for the spinner
+            MonthSpinnerAdapter adapter = new MonthSpinnerAdapter(this, monthOptions);
+            monthSpinner.setAdapter(adapter);
+
+            // Determine the initial selection based on saved preferences
+            int initialPosition = 0; // Default to "All Months"
+
+            if (preferencesManager.hasSelectedChartMonth()) {
+                int savedYear = preferencesManager.getSelectedChartYear();
+                int savedMonth = preferencesManager.getSelectedChartMonth();
+
+                // Find the matching option
+                for (int i = 1; i < monthOptions.size(); i++) {
+                    MonthOption option = monthOptions.get(i);
+                    if (option.year == savedYear && option.month == savedMonth) {
+                        initialPosition = i;
+                        break;
+                    }
+                }
+            }
+
+            // Set initial selection (without triggering listener)
+            if (initialPosition < monthOptions.size()) {
+                monthSpinner.setSelection(initialPosition, false);
+            }
+
+            // Set listener for month selection changes
+            monthSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                    MonthOption selected = monthOptions.get(position);
+
+                    if (position == 0) {
+                        // "All Months" option - use full date range
+                        preferencesManager.clearChartMonthSelection();
+                        updateSpendingChart();
+                    } else {
+                        // Specific month selected - filter chart data
+                        preferencesManager.saveChartMonthSelection(selected.year, selected.month);
+                        updateSpendingChartForMonth(selected.year, selected.month);
+                    }
+                }
+
+                @Override
+                public void onNothingSelected(AdapterView<?> parent) {
+                    // Do nothing
+                }
+            });
+
+            // Apply the saved selection by updating the chart
+            if (initialPosition > 0) {
+                // If a specific month was saved, update chart directly
+                MonthOption savedOption = monthOptions.get(initialPosition);
+                updateSpendingChartForMonth(savedOption.year, savedOption.month);
+            }
+        } else if (monthSelectorLayout != null) {
+            // Hide month selector for shorter date ranges
+            monthSelectorLayout.setVisibility(View.GONE);
+
+            // For shorter date ranges, always clear any saved month selection
+            preferencesManager.clearChartMonthSelection();
+        }
+    }
+
+    // Update the spendingChart method to accept month filtering parameters
+    private void updateSpendingChartForMonth(int year, int month) {
+        LineChart spendingLineChart = findViewById(R.id.spendingLineChart);
+        if (spendingLineChart == null) return;
+
+        // Check if chart is currently visible
+        if (spendingLineChart.getVisibility() != View.VISIBLE) {
+            // Don't update data if chart is collapsed
+            return;
+        }
+
+        // Create calendar for the specified month
+        Calendar cal = Calendar.getInstance();
+        cal.set(Calendar.YEAR, year);
+        cal.set(Calendar.MONTH, month);
+        cal.set(Calendar.DAY_OF_MONTH, 1);
+        cal.set(Calendar.HOUR_OF_DAY, 0);
+        cal.set(Calendar.MINUTE, 0);
+        cal.set(Calendar.SECOND, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        long monthStartDate = cal.getTimeInMillis();
+
+        // Move to the end of the month
+        cal.add(Calendar.MONTH, 1);
+        cal.add(Calendar.MILLISECOND, -1);
+        long monthEndDate = cal.getTimeInMillis();
+
+        // Show loading indicator
+        if (loadingIndicator != null) {
+            loadingIndicator.setVisibility(View.VISIBLE);
+        }
+
+        // Get transactions for the selected month
+        executorService.execute(() -> {
+            List<Transaction> chartTransactions = TransactionDatabase.getInstance(this)
+                    .transactionDao()
+                    .getTransactionsBetweenDatesSyncAscending(monthStartDate, monthEndDate);
+
+            updateChartWithTransactions(chartTransactions, spendingLineChart);
+        });
+    }
+
+    // Update the original updateSpendingChart method to use a common method for updating the chart
     private void updateSpendingChart() {
         LineChart spendingLineChart = findViewById(R.id.spendingLineChart);
         if (spendingLineChart == null) return;
 
-        // Start date is beginning of selected date range or 30 days ago if range is larger
-        long chartEndDate = toDate;
-        long chartStartDateInt = fromDate;
-
-        // If date range is more than 30 days, limit to last 30 days for better visualization
-        long thirtyDaysInMillis = 30 * 24 * 60 * 60 * 1000L;
-        if (toDate - fromDate > thirtyDaysInMillis) {
-            chartStartDateInt = toDate - thirtyDaysInMillis;
+        // Check if chart is currently visible
+        if (spendingLineChart.getVisibility() != View.VISIBLE) {
+            // Don't update data if chart is collapsed
+            return;
         }
-        long chartStartDate = chartStartDateInt;
+
+        // Start date is beginning of selected date range
+        long chartEndDate = toDate;
+        long chartStartDate = fromDate;
+
+        // Show loading indicator
+        if (loadingIndicator != null) {
+            loadingIndicator.setVisibility(View.VISIBLE);
+        }
 
         // Get transactions for chart date range
         executorService.execute(() -> {
@@ -1575,95 +1789,172 @@ public class MainActivity extends AppCompatActivity {
                     .transactionDao()
                     .getTransactionsBetweenDatesSyncAscending(chartStartDate, chartEndDate);
 
-            // Group transactions by day
-            Map<Long, Float> dailySpending = new TreeMap<>();
-            SimpleDateFormat dateKeyFormat = new SimpleDateFormat("yyyyMMdd", Locale.getDefault());
-            SimpleDateFormat dateLabelFormat = new SimpleDateFormat("dd MMM", Locale.getDefault());
-            List<String> dateLabels = new ArrayList<>();
-
-            // Process transactions
-            for (Transaction transaction : chartTransactions) {
-                if ("DEBIT".equals(transaction.getType()) && !transaction.isExcludedFromTotal()) {
-                    // Get day key by stripping time component
-                    Calendar cal = Calendar.getInstance();
-                    cal.setTimeInMillis(transaction.getDate());
-                    cal.set(Calendar.HOUR_OF_DAY, 0);
-                    cal.set(Calendar.MINUTE, 0);
-                    cal.set(Calendar.SECOND, 0);
-                    cal.set(Calendar.MILLISECOND, 0);
-                    long dayKey = cal.getTimeInMillis();
-
-                    // Add to daily total
-                    float currentAmount = dailySpending.getOrDefault(dayKey, 0f);
-                    dailySpending.put(dayKey, currentAmount + (float)transaction.getAmount());
-
-                    // Add date label if not already present
-                    String label = dateLabelFormat.format(new Date(dayKey));
-                    if (!dateLabels.contains(label)) {
-                        dateLabels.add(label);
-                    }
-                }
-            }
-
-            // Create chart entries
-            List<Entry> entries = new ArrayList<>();
-            int index = 0;
-            for (Map.Entry<Long, Float> entry : dailySpending.entrySet()) {
-                entries.add(new Entry(index++, entry.getValue()));
-            }
-
-            // Update chart on UI thread
-            runOnUiThread(() -> {
-                if (entries.isEmpty()) {
-                    // No data to display
-                    spendingLineChart.setNoDataText("No spending data available");
-                    spendingLineChart.invalidate();
-                    return;
-                }
-
-                // Create dataset
-                LineDataSet dataSet = new LineDataSet(entries, "Daily Spending");
-                dataSet.setColor(getColor(R.color.primary));
-                dataSet.setLineWidth(2f);
-                dataSet.setCircleColor(getColor(R.color.primary));
-                dataSet.setCircleRadius(4f);
-                dataSet.setDrawValues(false);
-                dataSet.setMode(LineDataSet.Mode.CUBIC_BEZIER); // Smooth curve
-
-                // Make the data points clickable
-                dataSet.setHighlightEnabled(true);
-                dataSet.setDrawHighlightIndicators(true);
-                dataSet.setHighLightColor(getColor(R.color.primary));
-
-                // Enable fill color
-                dataSet.setDrawFilled(true);
-                dataSet.setFillColor(getColor(R.color.primary));
-
-                // Create line data and set to chart
-                LineData lineData = new LineData(dataSet);
-                spendingLineChart.setData(lineData);
-
-                // Set X-axis labels
-                XAxis xAxis = spendingLineChart.getXAxis();
-                xAxis.setValueFormatter(new IndexAxisValueFormatter(dateLabels));
-                xAxis.setLabelCount(Math.min(dateLabels.size(), 5));
-
-                // Configure chart interaction
-                spendingLineChart.setTouchEnabled(true);
-                spendingLineChart.setDragEnabled(true);
-                spendingLineChart.setScaleEnabled(true);
-                spendingLineChart.setPinchZoom(true);
-
-                // Create and set custom marker view
-                ChartMarkerView markerView = new ChartMarkerView(this, R.layout.chart_marker_view, dateLabels);
-                markerView.setChartView(spendingLineChart);
-                spendingLineChart.setMarker(markerView);
-
-                // Refresh chart
-                spendingLineChart.invalidate();
-                spendingLineChart.animateX(1000);
-            });
+            updateChartWithTransactions(chartTransactions, spendingLineChart);
         });
+    }
+
+    // Common method for updating chart with transactions
+    private void updateChartWithTransactions(List<Transaction> chartTransactions, LineChart spendingLineChart) {
+        // Group transactions by day
+        Map<Long, Float> dailySpending = new TreeMap<>();
+        SimpleDateFormat dateKeyFormat = new SimpleDateFormat("yyyyMMdd", Locale.getDefault());
+        SimpleDateFormat dateLabelFormat = new SimpleDateFormat("dd MMM", Locale.getDefault());
+        List<String> dateLabels = new ArrayList<>();
+
+        // Process transactions
+        for (Transaction transaction : chartTransactions) {
+            if ("DEBIT".equals(transaction.getType()) && !transaction.isExcludedFromTotal()) {
+                // Get day key by stripping time component
+                Calendar cal = Calendar.getInstance();
+                cal.setTimeInMillis(transaction.getDate());
+                cal.set(Calendar.HOUR_OF_DAY, 0);
+                cal.set(Calendar.MINUTE, 0);
+                cal.set(Calendar.SECOND, 0);
+                cal.set(Calendar.MILLISECOND, 0);
+                long dayKey = cal.getTimeInMillis();
+
+                // Add to daily total
+                float currentAmount = dailySpending.getOrDefault(dayKey, 0f);
+                dailySpending.put(dayKey, currentAmount + (float)transaction.getAmount());
+
+                // Add date label if not already present
+                String label = dateLabelFormat.format(new Date(dayKey));
+                if (!dateLabels.contains(label)) {
+                    dateLabels.add(label);
+                }
+            }
+        }
+
+        // Create chart entries
+        List<Entry> entries = new ArrayList<>();
+        int index = 0;
+        for (Map.Entry<Long, Float> entry : dailySpending.entrySet()) {
+            entries.add(new Entry(index++, entry.getValue()));
+        }
+
+        // Hide loading indicator
+        runOnUiThread(() -> {
+            if (loadingIndicator != null) {
+                loadingIndicator.setVisibility(View.GONE);
+            }
+        });
+
+        // Update chart on UI thread
+        runOnUiThread(() -> {
+            if (entries.isEmpty()) {
+                // No data to display
+                spendingLineChart.clear();
+                spendingLineChart.setNoDataText("No spending data available");
+                spendingLineChart.invalidate();
+                return;
+            }
+
+            // Create dataset
+            LineDataSet dataSet = new LineDataSet(entries, "Daily Spending");
+            dataSet.setColor(getColor(R.color.primary));
+            dataSet.setLineWidth(2f);
+            dataSet.setCircleColor(getColor(R.color.primary));
+            dataSet.setCircleRadius(4f);
+            dataSet.setDrawValues(false);
+            dataSet.setMode(LineDataSet.Mode.CUBIC_BEZIER); // Smooth curve
+
+            // Make the data points clickable
+            dataSet.setHighlightEnabled(true);
+            dataSet.setDrawHighlightIndicators(true);
+            dataSet.setHighLightColor(getColor(R.color.primary));
+
+            // Enable fill color
+            dataSet.setDrawFilled(true);
+            dataSet.setFillColor(getColor(R.color.primary));
+
+            // Create line data and set to chart
+            LineData lineData = new LineData(dataSet);
+            spendingLineChart.setData(lineData);
+
+            // Set X-axis labels
+            XAxis xAxis = spendingLineChart.getXAxis();
+            xAxis.setValueFormatter(new IndexAxisValueFormatter(dateLabels));
+            xAxis.setLabelCount(Math.min(dateLabels.size(), 5));
+
+            // Configure chart interaction
+            spendingLineChart.setTouchEnabled(true);
+            spendingLineChart.setDragEnabled(true);
+            spendingLineChart.setScaleEnabled(true);
+            spendingLineChart.setPinchZoom(true);
+
+            // Create and set custom marker view
+            ChartMarkerView markerView = new ChartMarkerView(this, R.layout.chart_marker_view, dateLabels);
+            markerView.setChartView(spendingLineChart);
+            spendingLineChart.setMarker(markerView);
+
+            // Refresh chart
+            spendingLineChart.invalidate();
+            spendingLineChart.animateX(1000);
+        });
+    }
+
+    // Helper class for month options in the dropdown
+    private class MonthOption {
+        int year;
+        int month;
+        String label;
+
+        MonthOption(int year, int month, String label) {
+            this.year = year;
+            this.month = month;
+            this.label = label;
+        }
+
+        // Label getter for the adapter
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
+    // Custom adapter for the month spinner
+    private class MonthSpinnerAdapter extends ArrayAdapter<MonthOption> {
+        public MonthSpinnerAdapter(Context context, List<MonthOption> options) {
+            super(context, android.R.layout.simple_spinner_item, options);
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        }
+    }
+
+    // Helper method to generate month options from a date range
+    private List<MonthOption> generateMonthOptions(long fromDate, long toDate) {
+        List<MonthOption> options = new ArrayList<>();
+
+        // Create calendars for start and end dates
+        Calendar startCal = Calendar.getInstance();
+        startCal.setTimeInMillis(fromDate);
+
+        Calendar endCal = Calendar.getInstance();
+        endCal.setTimeInMillis(toDate);
+
+        // Clear day, hour, etc. to work with whole months
+        startCal.set(Calendar.DAY_OF_MONTH, 1);
+        startCal.set(Calendar.HOUR_OF_DAY, 0);
+        startCal.set(Calendar.MINUTE, 0);
+        startCal.set(Calendar.SECOND, 0);
+        startCal.set(Calendar.MILLISECOND, 0);
+
+        // Format for month labels
+        SimpleDateFormat monthFormat = new SimpleDateFormat("MMMM yyyy", Locale.getDefault());
+
+        // Add an option for each month in the range
+        Calendar currentCal = (Calendar) startCal.clone();
+        while (currentCal.getTimeInMillis() <= endCal.getTimeInMillis()) {
+            int year = currentCal.get(Calendar.YEAR);
+            int month = currentCal.get(Calendar.MONTH);
+            String label = monthFormat.format(currentCal.getTime());
+
+            options.add(new MonthOption(year, month, label));
+
+            // Move to next month
+            currentCal.add(Calendar.MONTH, 1);
+        }
+
+        return options;
     }
 
     public void updateSummary(List<Transaction> transactions) {
