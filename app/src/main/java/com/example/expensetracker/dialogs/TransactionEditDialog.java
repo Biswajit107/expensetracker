@@ -3,8 +3,12 @@ package com.example.expensetracker.dialogs;
 import android.app.Dialog;
 import android.os.Bundle;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -16,16 +20,24 @@ import androidx.fragment.app.DialogFragment;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.example.expensetracker.R;
+import com.example.expensetracker.models.CustomCategory;
 import com.example.expensetracker.models.Transaction;
+import com.example.expensetracker.viewmodel.CategoryViewModel;
 import com.example.expensetracker.viewmodel.ExclusionPatternViewModel;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.TextInputEditText;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 public class TransactionEditDialog extends DialogFragment {
     private Transaction transaction;
     private OnTransactionEditListener listener;
-    private ExclusionPatternViewModel patternViewModel;
+
+    // View models
+    private CategoryViewModel categoryViewModel;
 
     // Input views
     private TextInputEditText descriptionInput;
@@ -33,6 +45,11 @@ public class TransactionEditDialog extends DialogFragment {
     private SwitchMaterial excludeSwitch;
     private LinearLayout patternOptionLayout;
     private SwitchMaterial createPatternSwitch;
+
+    // Custom category views
+    private LinearLayout customCategoryLayout;
+    private EditText customCategoryInput;
+    private String selectedColor = "#4CAF50"; // Default color
 
     public interface OnTransactionEditListener {
         void onTransactionEdited(Transaction transaction);
@@ -66,6 +83,11 @@ public class TransactionEditDialog extends DialogFragment {
         patternOptionLayout = view.findViewById(R.id.patternOptionLayout);
         createPatternSwitch = view.findViewById(R.id.createPatternSwitch);
 
+        // Initialize custom category views
+        customCategoryLayout = view.findViewById(R.id.customCategoryLayout);
+        customCategoryInput = view.findViewById(R.id.customCategoryInput);
+        ViewGroup colorSelectionContainer = view.findViewById(R.id.colorSelectionContainer);
+
         // Add a button to view original SMS
         MaterialButton viewSmsButton = view.findViewById(R.id.viewSmsButton);
 
@@ -79,8 +101,26 @@ public class TransactionEditDialog extends DialogFragment {
             viewSmsButton.setVisibility(View.GONE);
         }
 
-        // Setup category dropdown
-        setupCategoryDropdown();
+        // Initialize category ViewModel
+        categoryViewModel = new ViewModelProvider(requireActivity()).get(CategoryViewModel.class);
+
+        // Setup category dropdown with custom categories
+        setupCategoryDropdownWithCustom();
+
+        // Setup category change listener
+        categoryInput.setOnItemClickListener((parent, clickedView, position, id) -> {
+            String selectedCategory = parent.getItemAtPosition(position).toString();
+            if ("Others".equals(selectedCategory)) {
+                // Show custom category input
+                customCategoryLayout.setVisibility(View.VISIBLE);
+            } else {
+                // Hide custom category input
+                customCategoryLayout.setVisibility(View.GONE);
+            }
+        });
+
+        // Setup color selection
+        setupColorSelection(colorSelectionContainer);
 
         // Populate data
         populateTransactionData();
@@ -93,7 +133,38 @@ public class TransactionEditDialog extends DialogFragment {
         // Setup buttons
         cancelButton.setOnClickListener(v -> dismiss());
         saveButton.setOnClickListener(v -> {
-            updateTransaction();
+            String selectedCategory = categoryInput.getText().toString();
+
+            if ("Others".equals(selectedCategory) &&
+                    customCategoryInput.getText().toString().trim().length() > 0) {
+                // Create a custom category
+                String customCategoryName = customCategoryInput.getText().toString().trim();
+                CustomCategory newCategory = new CustomCategory(customCategoryName, selectedColor);
+                categoryViewModel.insertCategory(newCategory);
+
+                // Use the custom category name for the transaction
+                transaction.setCategory(customCategoryName);
+            } else {
+                transaction.setCategory(selectedCategory);
+            }
+
+            // Update other transaction fields
+            transaction.setDescription(descriptionInput.getText().toString());
+
+            // Store previous excluded state to detect changes
+            boolean wasExcluded = transaction.isExcludedFromTotal();
+            boolean nowExcluded = excludeSwitch.isChecked();
+
+            transaction.setExcludedFromTotal(nowExcluded);
+
+            // Set exclusion source if changed
+            if (!wasExcluded && nowExcluded) {
+                // Newly excluded - mark as manual
+                transaction.setExclusionSource("MANUAL");
+            } else if (wasExcluded && !nowExcluded) {
+                // No longer excluded - reset source
+                transaction.setExclusionSource("NONE");
+            }
 
             // NEW: Create exclusion pattern if option is selected
             if (excludeSwitch.isChecked() && createPatternSwitch.isChecked()) {
@@ -105,9 +176,6 @@ public class TransactionEditDialog extends DialogFragment {
             }
             dismiss();
         });
-
-        // Initialize pattern ViewModel
-        patternViewModel = new ViewModelProvider(requireActivity()).get(ExclusionPatternViewModel.class);
 
         // Build the dialog
         builder.setView(view);
@@ -132,14 +200,85 @@ public class TransactionEditDialog extends DialogFragment {
         builder.show();
     }
 
-    private void setupCategoryDropdown() {
-        String[] categories = Transaction.Categories.getAllCategories();
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(
-                requireContext(),
-                android.R.layout.simple_dropdown_item_1line,
-                categories
-        );
-        categoryInput.setAdapter(adapter);
+    // New method to set up category dropdown with custom categories
+    private void setupCategoryDropdownWithCustom() {
+        // Get predefined categories
+        List<String> categories = new ArrayList<>(Arrays.asList(Transaction.Categories.getAllCategories()));
+
+        // Add "Others" option at the end
+        if (!categories.contains("Others")) {
+            categories.add("Others");
+        }
+
+        // Get custom categories
+        categoryViewModel.getAllCustomCategories().observe(this, customCategories -> {
+            // Add custom categories to list
+            for (CustomCategory customCategory : customCategories) {
+                if (!categories.contains(customCategory.getName())) {
+                    categories.add(customCategory.getName());
+                }
+            }
+
+            // Create adapter
+            ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                    requireContext(),
+                    android.R.layout.simple_dropdown_item_1line,
+                    categories
+            );
+
+            // Set adapter and current selection
+            categoryInput.setAdapter(adapter);
+            categoryInput.setText(transaction.getCategory(), false);
+
+            // Check if current category is "Others"
+            if ("Others".equals(transaction.getCategory())) {
+                customCategoryLayout.setVisibility(View.VISIBLE);
+            } else {
+                customCategoryLayout.setVisibility(View.GONE);
+            }
+        });
+    }
+
+    // Method to set up color selection
+    private void setupColorSelection(ViewGroup colorContainer) {
+        // Define available colors
+        String[] colors = {"#F44336", "#2196F3", "#4CAF50", "#FFC107", "#9C27B0", "#795548"};
+
+        // Clear existing views
+        colorContainer.removeAllViews();
+
+        // Create a color circle for each color
+        for (String color : colors) {
+            View colorView = requireActivity().getLayoutInflater()
+                    .inflate(R.layout.item_color_selection, colorContainer, false);
+
+            View colorCircle = colorView.findViewById(R.id.colorCircle);
+            colorCircle.setBackgroundColor(android.graphics.Color.parseColor(color));
+
+            // Selection indicator
+            View checkIcon = colorView.findViewById(R.id.checkIcon);
+
+            // Set click listener
+            colorView.setOnClickListener(v -> {
+                // Update selected color
+                selectedColor = color;
+
+                // Update UI to show selection
+                for (int i = 0; i < colorContainer.getChildCount(); i++) {
+                    View child = colorContainer.getChildAt(i);
+                    child.findViewById(R.id.checkIcon).setVisibility(View.GONE);
+                }
+
+                checkIcon.setVisibility(View.VISIBLE);
+            });
+
+            colorContainer.addView(colorView);
+        }
+
+        // Select the first color by default
+        if (colorContainer.getChildCount() > 0) {
+            colorContainer.getChildAt(0).findViewById(R.id.checkIcon).setVisibility(View.VISIBLE);
+        }
     }
 
     private void populateTransactionData() {
@@ -176,33 +315,15 @@ public class TransactionEditDialog extends DialogFragment {
         }
     }
 
-    private void updateTransaction() {
-        if (transaction != null) {
-            transaction.setDescription(descriptionInput.getText().toString());
-            transaction.setCategory(categoryInput.getText().toString());
-
-            // Store previous excluded state to detect changes
-            boolean wasExcluded = transaction.isExcludedFromTotal();
-            boolean nowExcluded = excludeSwitch.isChecked();
-
-            transaction.setExcludedFromTotal(nowExcluded);
-
-            // Set exclusion source if changed
-            if (!wasExcluded && nowExcluded) {
-                // Newly excluded - mark as manual
-                transaction.setExclusionSource("MANUAL");
-            } else if (wasExcluded && !nowExcluded) {
-                // No longer excluded - reset source
-                transaction.setExclusionSource("NONE");
-            }
-        }
-    }
-
     /**
      * Create an exclusion pattern from the current transaction
      */
     private void createExclusionPattern() {
         if (transaction == null) return;
+
+        // Get the ExclusionPatternViewModel from the parent activity
+        ExclusionPatternViewModel patternViewModel = new ViewModelProvider(requireActivity())
+                .get(ExclusionPatternViewModel.class);
 
         // Create pattern in ViewModel
         patternViewModel.createPatternFromTransaction(transaction);

@@ -1,5 +1,6 @@
 package com.example.expensetracker.database;
 
+import com.example.expensetracker.models.CustomCategory;
 import com.example.expensetracker.models.ExclusionPattern;
 
 import android.content.Context;
@@ -11,11 +12,13 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
 
 import com.example.expensetracker.models.Transaction;
 
-@Database(entities = {Transaction.class, ExclusionPattern.class}, version = 4, exportSchema = false)
+@Database(entities = {Transaction.class, ExclusionPattern.class, CustomCategory.class},
+        version = 6, exportSchema = false)
 public abstract class TransactionDatabase extends RoomDatabase {
     private static TransactionDatabase instance;
     public abstract TransactionDao transactionDao();
     public abstract ExclusionPatternDao exclusionPatternDao();
+    public abstract CustomCategoryDao customCategoryDao();
 
     // Define migration from version 2 to 3
     static final Migration MIGRATION_3_4 = new Migration(3, 4) {
@@ -40,6 +43,33 @@ public abstract class TransactionDatabase extends RoomDatabase {
         }
     };
 
+    static final Migration MIGRATION_4_5 = new Migration(4, 5) {
+        @Override
+        public void migrate(SupportSQLiteDatabase database) {
+            // Create custom_categories table with nullable fields matching the entity class definition
+            database.execSQL("CREATE TABLE IF NOT EXISTS custom_categories (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "name TEXT, " +              // Removed NOT NULL constraint
+                    "color TEXT, " +             // Removed NOT NULL constraint
+                    "created_date INTEGER NOT NULL, " +
+                    "use_count INTEGER NOT NULL DEFAULT 0)");
+        }
+    };
+
+    static final Migration MIGRATION_5_6 = new Migration(5, 6) {
+        @Override
+        public void migrate(SupportSQLiteDatabase database) {
+            // Drop and recreate the custom_categories table with the correct schema
+            database.execSQL("DROP TABLE IF EXISTS custom_categories");
+            database.execSQL("CREATE TABLE IF NOT EXISTS custom_categories (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "name TEXT NOT NULL, " +
+                    "color TEXT NOT NULL, " +
+                    "created_date INTEGER NOT NULL, " +
+                    "use_count INTEGER NOT NULL DEFAULT 0)");
+        }
+    };
+
     public static synchronized TransactionDatabase getInstance(Context context) {
         if (instance == null) {
             instance = Room.databaseBuilder(
@@ -47,7 +77,7 @@ public abstract class TransactionDatabase extends RoomDatabase {
                             TransactionDatabase.class,
                             "transaction_database"
                     )
-                    .addMigrations(MIGRATION_3_4) // Add the migration to the builder
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6) // Add the new migration
                     .fallbackToDestructiveMigration()
                     .build();
         }

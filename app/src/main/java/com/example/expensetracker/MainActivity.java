@@ -48,6 +48,7 @@ import android.widget.Toast;
 import com.example.expensetracker.adapters.DateGroupedTransactionAdapter;
 import com.example.expensetracker.adapters.TransactionAdapter;
 import com.example.expensetracker.database.TransactionDatabase;
+import com.example.expensetracker.dialogs.CategorySelectionDialog;
 import com.example.expensetracker.dialogs.TransactionEditDialog;
 import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.receivers.EnhancedSMSReceiver;
@@ -535,6 +536,33 @@ public class MainActivity extends AppCompatActivity {
         adapter.setOnTransactionClickListener(transaction -> {
             showEditTransactionDialog(transaction);
         });
+
+        adapter.setOnCategoryClickListener((transaction, categoryView) -> {
+            showCategorySelectionDialog(transaction, categoryView);
+        });
+    }
+
+    // Method to show category selection dialog
+    private void showCategorySelectionDialog(Transaction transaction, View categoryView) {
+        CategorySelectionDialog dialog = new CategorySelectionDialog(transaction);
+
+        dialog.setOnCategorySelectedListener((updatedTransaction, categoryName, isCustom) -> {
+            // Update the transaction category
+            updatedTransaction.setCategory(categoryName);
+
+            // Update in the database
+            viewModel.updateTransaction(updatedTransaction);
+
+            // Update in the adapter
+            if (smartLoadingStrategy != null) {
+                smartLoadingStrategy.updateTransactionInAdapters(updatedTransaction);
+            }
+
+            // Show a confirmation
+            Toast.makeText(this, "Category updated to " + categoryName, Toast.LENGTH_SHORT).show();
+        });
+
+        dialog.show(getSupportFragmentManager(), "select_category");
     }
 
     private void setupViewModel() {

@@ -1,26 +1,34 @@
 package com.example.expensetracker.adapters;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.Typeface;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
+import androidx.fragment.app.FragmentActivity;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.RecyclerView;
 import com.example.expensetracker.R;
 import com.example.expensetracker.models.Transaction;
+import com.example.expensetracker.viewmodel.CategoryViewModel;
 import com.google.android.material.chip.Chip;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.TransactionViewHolder> {
     private List<Transaction> transactions = new ArrayList<>();
     private OnTransactionClickListener listener;
+    // Add a field for the category click listener
+    private OnCategoryClickListener categoryClickListener;
 
     // Interface for click handling
     public interface OnTransactionClickListener {
@@ -30,6 +38,11 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
     // Set click listener
     public void setOnTransactionClickListener(OnTransactionClickListener listener) {
         this.listener = listener;
+    }
+
+    // Add a new listener interface for category clicks
+    public interface OnCategoryClickListener {
+        void onCategoryClick(Transaction transaction, View categoryView);
     }
 
     @NonNull
@@ -54,6 +67,11 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
     public void setTransactions(List<Transaction> transactions) {
         this.transactions = transactions;
         notifyDataSetChanged();
+    }
+
+    // Add a method to set the category click listener
+    public void setOnCategoryClickListener(OnCategoryClickListener listener) {
+        this.categoryClickListener = listener;
     }
 
     class TransactionViewHolder extends RecyclerView.ViewHolder {
@@ -208,10 +226,11 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
         }
 
         // Helper method to get category color
-        private int getCategoryColor(String category) {
+        private int getCategoryColor(String categoryName) {
             Context context = itemView.getContext();
 
-            switch (category) {
+            // Handle predefined categories first with immediate return
+            switch (categoryName) {
                 case Transaction.Categories.FOOD:
                     return ContextCompat.getColor(context, R.color.category_food);
                 case Transaction.Categories.SHOPPING:
@@ -227,7 +246,43 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
                 case Transaction.Categories.EDUCATION:
                     return ContextCompat.getColor(context, R.color.category_education);
                 default:
-                    return ContextCompat.getColor(context, R.color.text_secondary);
+                    // Return default color immediately
+                    int defaultColor = ContextCompat.getColor(context, R.color.text_secondary);
+
+                    // Start async lookup that will update the UI element later
+                    FragmentActivity activity = (FragmentActivity) context;
+                    CategoryViewModel viewModel = new ViewModelProvider(activity).get(CategoryViewModel.class);
+
+                    viewModel.getCategoryByNameAsync(categoryName, category -> {
+                        if (category != null && category.getColor() != null) {
+                            try {
+                                int customColor = Color.parseColor(category.getColor());
+                                // Update the UI element directly with the new color when it's available
+                                updateCategoryIndicatorColor(categoryName, customColor);
+                            } catch (Exception e) {
+                                Log.e("TransactionAdapter", "Error parsing color", e);
+                            }
+                        }
+                    });
+
+                    // Return default color for now
+                    return defaultColor;
+            }
+        }
+
+        // Add a method to update the UI when color becomes available
+        private void updateCategoryIndicatorColor(String categoryName, int color) {
+            // Find the view that needs updating
+            // This depends on your specific implementation
+
+            // Example:
+            if (categoryIndicator != null && categoryName.equals(categoryName)) {
+                categoryIndicator.setTextColor(color);
+
+                View categoryColorIndicator = itemView.findViewById(R.id.categoryColorIndicator);
+                if (categoryColorIndicator != null) {
+                    categoryColorIndicator.setBackgroundColor(color);
+                }
             }
         }
     }
