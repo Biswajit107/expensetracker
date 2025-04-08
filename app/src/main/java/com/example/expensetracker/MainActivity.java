@@ -16,6 +16,7 @@ import android.widget.LinearLayout;
 import android.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
 import androidx.lifecycle.ViewModelProvider;
+import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -54,6 +55,7 @@ import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.receivers.EnhancedSMSReceiver;
 import com.example.expensetracker.ui.ChartMarkerView;
 import com.example.expensetracker.utils.SmartLoadingStrategy;
+import com.example.expensetracker.utils.SwipeToExcludeCallback;
 import com.example.expensetracker.viewmodel.TransactionViewModel;
 import com.example.expensetracker.utils.PreferencesManager;
 import com.github.mikephil.charting.charts.LineChart;
@@ -72,6 +74,7 @@ import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.slider.RangeSlider;
+import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.textfield.TextInputEditText;
 
 import java.lang.reflect.Field;
@@ -157,6 +160,8 @@ public class MainActivity extends AppCompatActivity {
         setupSort();
         setupExpandableSearch();
 
+        setupSwipeToExclude();
+
         // Check permissions and setup navigation
         checkAndRequestSMSPermissions();
         setupBottomNavigation();
@@ -221,6 +226,9 @@ public class MainActivity extends AppCompatActivity {
         smartLoadingStrategy.setOnTransactionClickListener(transaction -> {
             showEditTransactionDialog(transaction);
         });
+
+        // Set up swipe to exclude functionality
+        smartLoadingStrategy.setupSwipeToExclude(this, this::excludeTransactionManually);
 
         // Log the initial view mode
         Log.d(TAG, "Starting with " + (preferencesManager.getViewModePreference() ? "grouped" : "list") + " view based on user preference");
@@ -582,6 +590,72 @@ public class MainActivity extends AppCompatActivity {
                 resetBudgetUI(0);
             }
         });
+    }
+
+
+    // Add this method to the MainActivity class after setupRecyclerView() method
+    private void setupSwipeToExclude() {
+        RecyclerView recyclerView = findViewById(R.id.recyclerView);
+        if (recyclerView == null) {
+            Log.e(TAG, "RecyclerView not found when setting up swipe to exclude");
+            return;
+        }
+
+        // Create the SwipeToExcludeCallback
+        SwipeToExcludeCallback swipeCallback = new SwipeToExcludeCallback(
+                this,
+                adapter,
+                transaction -> {
+                    // This is called when a transaction is swiped
+                    // Handle the exclusion of the transaction
+                    excludeTransactionManually(transaction);
+                }
+        );
+
+        // Attach the callback to the RecyclerView
+        ItemTouchHelper itemTouchHelper = new ItemTouchHelper(swipeCallback);
+        itemTouchHelper.attachToRecyclerView(recyclerView);
+    }
+
+    // Add this method to handle the exclusion action
+    public void excludeTransactionManually(Transaction transaction) {
+        // Store previous excluded state to detect changes
+        boolean wasExcluded = transaction.isExcludedFromTotal();
+
+        // Set the transaction as excluded
+        transaction.setExcludedFromTotal(true);
+
+        // Set exclusion source if changed
+        if (!wasExcluded) {
+            // Newly excluded - mark as manual
+            transaction.setExclusionSource("MANUAL");
+        }
+
+        // Update the transaction in the database
+        viewModel.updateTransaction(transaction);
+
+        // Update in the adapter
+        if (smartLoadingStrategy != null) {
+            smartLoadingStrategy.updateTransactionInAdapters(transaction);
+        }
+
+        // Show a confirmation to the user
+        Snackbar.make(
+                        findViewById(android.R.id.content),
+                        "Transaction excluded",
+                        Snackbar.LENGTH_LONG
+                )
+                .setAction("UNDO", v -> {
+                    // Undo the exclusion
+                    transaction.setExcludedFromTotal(false);
+                    transaction.setExclusionSource("NONE");
+                    viewModel.updateTransaction(transaction);
+
+                    if (smartLoadingStrategy != null) {
+                        smartLoadingStrategy.updateTransactionInAdapters(transaction);
+                    }
+                })
+                .show();
     }
 
     private void showEditTransactionDialog(Transaction transaction) {

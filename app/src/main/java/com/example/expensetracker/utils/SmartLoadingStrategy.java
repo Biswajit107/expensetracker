@@ -3,9 +3,12 @@ package com.example.expensetracker.utils;
 import android.content.Context;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.expensetracker.MainActivity;
@@ -133,6 +136,95 @@ public class SmartLoadingStrategy {
     public void setOnTransactionClickListener(TransactionAdapter.OnTransactionClickListener listener) {
         transactionAdapter.setOnTransactionClickListener(listener);
         groupedAdapter.setOnTransactionClickListener(listener);
+    }
+
+    /**
+     * Setup swipe-to-exclude functionality on the current RecyclerView
+     * This needs to be called whenever the adapter changes
+     *
+     * @param context     The activity context
+     * @param listener    The SwipeToExclude action listener
+     */
+    public void setupSwipeToExclude(Context context, SwipeToExcludeCallback.SwipeActionListener listener) {
+        if (recyclerView == null) return;
+
+        // Create the SwipeToExcludeCallback
+        SwipeToExcludeCallback swipeCallback;
+
+        if (isGroupedViewActive) {
+            // For grouped view, create a special swipe handler for the nested RecyclerViews
+            setupGroupedSwipeToExclude(context, listener);
+        } else {
+            // For regular list view, attach the swipe handler to the main RecyclerView
+            swipeCallback = new SwipeToExcludeCallback(context, transactionAdapter, listener);
+            ItemTouchHelper itemTouchHelper = new ItemTouchHelper(swipeCallback);
+            itemTouchHelper.attachToRecyclerView(recyclerView);
+        }
+    }
+
+    /**
+     * Special handling for setting up swipe in grouped view
+     * We need to find all nested RecyclerViews and attach the swipe handler to each
+     */
+    private void setupGroupedSwipeToExclude(Context context, SwipeToExcludeCallback.SwipeActionListener listener) {
+        if (recyclerView == null || groupedAdapter == null) return;
+
+        // We need to find the nested RecyclerViews inside each group
+        recyclerView.addOnChildAttachStateChangeListener(new RecyclerView.OnChildAttachStateChangeListener() {
+            @Override
+            public void onChildViewAttachedToWindow(@NonNull View view) {
+                // Look for the nestedTransactionList RecyclerView in each group item
+                RecyclerView nestedList = view.findViewById(R.id.nestedTransactionList);
+                if (nestedList != null) {
+                    // Get the adapter
+                    RecyclerView.Adapter<?> nestedAdapter = nestedList.getAdapter();
+                    if (nestedAdapter instanceof TransactionAdapter) {
+                        // Attach swipe handler to this nested list
+                        SwipeToExcludeCallback swipeCallback = new SwipeToExcludeCallback(
+                                context,
+                                (TransactionAdapter) nestedAdapter,
+                                listener
+                        );
+                        ItemTouchHelper itemTouchHelper = new ItemTouchHelper(swipeCallback);
+                        itemTouchHelper.attachToRecyclerView(nestedList);
+                    }
+                }
+            }
+
+            @Override
+            public void onChildViewDetachedFromWindow(@NonNull View view) {
+                // Nothing needed here
+            }
+        });
+    }
+
+    /**
+     * Recursively find and setup swipe handlers on nested RecyclerViews
+     */
+    private void findAndSetupNestedRecyclerViews(ViewGroup viewGroup, Context context,
+                                                 SwipeToExcludeCallback.SwipeActionListener listener) {
+        for (int i = 0; i < viewGroup.getChildCount(); i++) {
+            View child = viewGroup.getChildAt(i);
+
+            if (child instanceof RecyclerView) {
+                // Found a nested RecyclerView, set up swipe on it
+                RecyclerView nestedRecyclerView = (RecyclerView) child;
+                RecyclerView.Adapter<?> nestedAdapter = nestedRecyclerView.getAdapter();
+
+                if (nestedAdapter instanceof TransactionAdapter) {
+                    SwipeToExcludeCallback swipeCallback = new SwipeToExcludeCallback(
+                            context,
+                            (TransactionAdapter) nestedAdapter,
+                            listener
+                    );
+                    ItemTouchHelper itemTouchHelper = new ItemTouchHelper(swipeCallback);
+                    itemTouchHelper.attachToRecyclerView(nestedRecyclerView);
+                }
+            } else if (child instanceof ViewGroup) {
+                // Recursive search for deeper nested RecyclerViews
+                findAndSetupNestedRecyclerViews((ViewGroup) child, context, listener);
+            }
+        }
     }
 
     /**
@@ -526,6 +618,14 @@ public class SmartLoadingStrategy {
         if (context instanceof android.app.Activity) {
             ((android.app.Activity) context).runOnUiThread(() -> {
                 recyclerView.setAdapter(adapter);
+
+                // Re-setup swipe handlers if this is an Activity context
+                if (context instanceof MainActivity) {
+                    MainActivity activity = (MainActivity) context;
+                    setupSwipeToExclude(context, transaction -> {
+                        activity.excludeTransactionManually(transaction);
+                    });
+                }
             });
         }
     }

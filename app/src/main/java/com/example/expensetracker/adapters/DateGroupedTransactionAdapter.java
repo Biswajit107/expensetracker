@@ -9,11 +9,14 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.expensetracker.MainActivity;
 import com.example.expensetracker.R;
 import com.example.expensetracker.models.Transaction;
+import com.example.expensetracker.utils.SwipeToExcludeCallback;
 
 import java.text.NumberFormat;
 import java.text.ParseException;
@@ -721,6 +724,16 @@ public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGrou
                 }
                 nestedAdapter.setTransactions(group.getTransactions());
                 nestedTransactionList.setAdapter(nestedAdapter);
+
+                if (context instanceof MainActivity) {
+                    SwipeToExcludeCallback swipeCallback = new SwipeToExcludeCallback(
+                            context,
+                            nestedAdapter,
+                            transaction -> ((MainActivity) context).excludeTransactionManually(transaction)
+                    );
+                    ItemTouchHelper itemTouchHelper = new ItemTouchHelper(swipeCallback);
+                    itemTouchHelper.attachToRecyclerView(nestedTransactionList);
+                }
             }
         }
 

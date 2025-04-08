@@ -74,7 +74,7 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
         this.categoryClickListener = listener;
     }
 
-    class TransactionViewHolder extends RecyclerView.ViewHolder {
+    public class TransactionViewHolder extends RecyclerView.ViewHolder {
         private TextView dateText;
         private TextView bankText;
         private Chip typeChip;

@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -31,6 +32,12 @@ public class BudgetCompactBlueWidgetProvider extends AppWidgetProvider {
     private static final String TAG = "CompactBudgetWidget";
     private static final String ACTION_UPDATE_WIDGET = "com.example.expensetracker.widget.UPDATE_COMPACT_BLUE_WIDGET";
     private static final String ACTION_REFRESH_WIDGET = "com.example.expensetracker.widget.REFRESH_COMPACT_BLUE_WIDGET";
+    private static final String ACTION_RECONFIGURE_WIDGET = "com.example.expensetracker.widget.RECONFIGURE_COMPACT_BLUE_WIDGET";
+
+    // Preference keys for storing widget date ranges
+    public static final String PREFS_NAME = "com.example.expensetracker.widget.BudgetCompactBlueWidget";
+    public static final String PREF_PREFIX_FROM_DATE = "widget_from_date_";
+    public static final String PREF_PREFIX_TO_DATE = "widget_to_date_";
 
     @Override
     public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
@@ -45,6 +52,21 @@ public class BudgetCompactBlueWidgetProvider extends AppWidgetProvider {
     @Override
     public void onReceive(Context context, Intent intent) {
         Log.d(TAG, "onReceive: " + intent.getAction());
+
+        // Handle reconfigure action
+        if (ACTION_RECONFIGURE_WIDGET.equals(intent.getAction())) {
+            int widgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID,
+                    AppWidgetManager.INVALID_APPWIDGET_ID);
+
+            if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                // Launch configuration activity for the specific widget
+                Intent configIntent = new Intent(context, BudgetCompactBlueWidgetConfigActivity.class);
+                configIntent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId);
+                configIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(configIntent);
+            }
+            return;
+        }
 
         // Handle both update and refresh actions
         if (ACTION_UPDATE_WIDGET.equals(intent.getAction()) ||
@@ -66,7 +88,7 @@ public class BudgetCompactBlueWidgetProvider extends AppWidgetProvider {
         }
     }
 
-    private static void updateAppWidget(Context context, AppWidgetManager appWidgetManager, int appWidgetId) {
+    public static void updateAppWidget(Context context, AppWidgetManager appWidgetManager, int appWidgetId) {
         Log.d(TAG, "Starting updateWidget for ID: " + appWidgetId);
 
         try {
@@ -86,16 +108,56 @@ public class BudgetCompactBlueWidgetProvider extends AppWidgetProvider {
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             views.setOnClickPendingIntent(R.id.refreshButton, refreshPendingIntent);
 
+            // New: Set up reconfigure intent for clicking on the date text
+            Intent reconfigureIntent = new Intent(context, BudgetCompactBlueWidgetProvider.class);
+            reconfigureIntent.setAction(ACTION_RECONFIGURE_WIDGET);
+            reconfigureIntent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId);
+            PendingIntent reconfigurePendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    appWidgetId, // Use widget ID as request code to make intents unique
+                    reconfigureIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            views.setOnClickPendingIntent(R.id.dateText, reconfigurePendingIntent);
+
+            // Get the date range from preferences for this widget
+            SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            long fromDate = prefs.getLong(PREF_PREFIX_FROM_DATE + appWidgetId, 0);
+            long toDate = prefs.getLong(PREF_PREFIX_TO_DATE + appWidgetId, 0);
+
+            // If no custom date range, use current month
+            if (fromDate == 0 || toDate == 0) {
+                Calendar cal = Calendar.getInstance();
+
+                // End of today
+                cal.set(Calendar.HOUR_OF_DAY, 23);
+                cal.set(Calendar.MINUTE, 59);
+                cal.set(Calendar.SECOND, 59);
+                toDate = cal.getTimeInMillis();
+
+                // Start of current month
+                cal.set(Calendar.DAY_OF_MONTH, 1);
+                cal.set(Calendar.HOUR_OF_DAY, 0);
+                cal.set(Calendar.MINUTE, 0);
+                cal.set(Calendar.SECOND, 0);
+                fromDate = cal.getTimeInMillis();
+            }
+
             // Set current date in widget
             SimpleDateFormat dateFormat = new SimpleDateFormat("MMM dd", Locale.getDefault());
-            views.setTextViewText(R.id.dateText, dateFormat.format(new Date()));
+
+            // Format date range
+            String fromDateStr = dateFormat.format(new Date(fromDate));
+            String toDateStr = dateFormat.format(new Date(toDate));
+            String dateRangeText = fromDateStr + " - " + toDateStr;
+
+            views.setTextViewText(R.id.dateText, dateRangeText);
 
             // Update the widget with static data first to ensure it displays
             appWidgetManager.updateAppWidget(appWidgetId, views);
             Log.d(TAG, "Updated widget with static data");
 
             // Then load real data asynchronously
-            loadFinancialData(context, views, appWidgetManager, appWidgetId);
+            loadFinancialData(context, views, appWidgetManager, appWidgetId, fromDate, toDate);
 
         } catch (Exception e) {
             Log.e(TAG, "Error updating widget: " + e.getMessage(), e);
@@ -103,7 +165,8 @@ public class BudgetCompactBlueWidgetProvider extends AppWidgetProvider {
     }
 
     private static void loadFinancialData(Context context, RemoteViews views,
-                                          AppWidgetManager appWidgetManager, int appWidgetId) {
+                                          AppWidgetManager appWidgetManager, int appWidgetId,
+                                          long startDate, long endDate) {
         Log.d(TAG, "Starting to load financial data");
 
         // Create repository to fetch data
@@ -115,22 +178,6 @@ public class BudgetCompactBlueWidgetProvider extends AppWidgetProvider {
 
         executorService.execute(() -> {
             try {
-                // Get current month date range
-                Calendar cal = Calendar.getInstance();
-
-                // End of today
-                cal.set(Calendar.HOUR_OF_DAY, 23);
-                cal.set(Calendar.MINUTE, 59);
-                cal.set(Calendar.SECOND, 59);
-                long endDate = cal.getTimeInMillis();
-
-                // Start of current month
-                cal.set(Calendar.DAY_OF_MONTH, 1);
-                cal.set(Calendar.HOUR_OF_DAY, 0);
-                cal.set(Calendar.MINUTE, 0);
-                cal.set(Calendar.SECOND, 0);
-                long startDate = cal.getTimeInMillis();
-
                 // Fetch transactions
                 List<Transaction> transactions = repository.getTransactionsBetweenDatesSync(startDate, endDate);
                 Log.d(TAG, "Fetched " + transactions.size() + " transactions");
@@ -149,7 +196,6 @@ public class BudgetCompactBlueWidgetProvider extends AppWidgetProvider {
                     }
                 }
 
-                // Placeholder budget value - get from preferences in a real implementation
                 // Get actual budget value from preferences
                 PreferencesManager preferencesManager = new PreferencesManager(context);
                 double budget = preferencesManager.getBudgetAmount(0.0);
@@ -218,5 +264,18 @@ public class BudgetCompactBlueWidgetProvider extends AppWidgetProvider {
     @Override
     public void onDisabled(Context context) {
         Log.d(TAG, "onDisabled called - last widget instance removed");
+    }
+
+    @Override
+    public void onDeleted(Context context, int[] appWidgetIds) {
+        // Clean up preferences when widgets are removed
+        SharedPreferences.Editor prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit();
+        for (int appWidgetId : appWidgetIds) {
+            prefs.remove(PREF_PREFIX_FROM_DATE + appWidgetId);
+            prefs.remove(PREF_PREFIX_TO_DATE + appWidgetId);
+        }
+        prefs.apply();
+
+        super.onDeleted(context, appWidgetIds);
     }
 }

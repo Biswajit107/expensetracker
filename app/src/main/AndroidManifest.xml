@@ -39,6 +39,13 @@
         <activity
             android:launchMode="singleTask"
             android:name=".ExclusionPatternsActivity" />
+        <activity
+            android:name=".widget.BudgetCompactBlueWidgetConfigActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
 
         <receiver
             android:name=".receivers.EnhancedSMSReceiver"
