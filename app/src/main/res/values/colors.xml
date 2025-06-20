@@ -58,6 +58,8 @@
     <!-- Add these color definitions -->
     <color name="info_background">#E3F2FD</color> <!-- Light blue background -->
     <color name="info_text">#0D47A1</color> <!-- Dark blue text for contrast -->
+    <color name="category_others">#607D8B</color>
+    <color name="gray_light">#E0E0E0</color>
 
     <!-- Chart colors -->
     <array name="chart_colors">

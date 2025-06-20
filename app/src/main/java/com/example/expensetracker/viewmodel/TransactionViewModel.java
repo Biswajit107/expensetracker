@@ -72,6 +72,13 @@ public class TransactionViewModel extends AndroidViewModel {
         transactionUpdated.setValue(!transactionUpdated.getValue());
     }
 
+    // Method to insert a new transaction
+    public void insert(Transaction transaction) {
+        repository.insert(transaction);
+        // Notify observers that data has changed
+        transactionUpdated.setValue(!transactionUpdated.getValue());
+    }
+
     /**
      * Add these methods to TransactionViewModel.java
      */

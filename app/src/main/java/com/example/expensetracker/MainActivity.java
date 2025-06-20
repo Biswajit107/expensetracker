@@ -15,6 +15,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
 import androidx.core.app.ActivityCompat;
+import androidx.fragment.app.FragmentTransaction;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -54,6 +55,7 @@ import com.example.expensetracker.dialogs.TransactionEditDialog;
 import com.example.expensetracker.models.Transaction;
 import com.example.expensetracker.receivers.EnhancedSMSReceiver;
 import com.example.expensetracker.ui.ChartMarkerView;
+import com.example.expensetracker.ui.QuickEntryFragment;
 import com.example.expensetracker.utils.SmartLoadingStrategy;
 import com.example.expensetracker.utils.SwipeToExcludeCallback;
 import com.example.expensetracker.viewmodel.TransactionViewModel;
@@ -90,7 +92,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements QuickEntryFragment.OnTransactionAddedListener {
     private static final int SMS_PERMISSION_REQUEST_CODE = 123;
     private static final String TAG = "MainActivity";
 
@@ -122,6 +124,8 @@ public class MainActivity extends AppCompatActivity {
     private SmartLoadingStrategy smartLoadingStrategy;
     private MaterialButton viewModeButton;
     private ViewMode currentViewMode = ViewMode.LIST; // Default to list mode
+
+    private boolean isQuickEntryVisible = false;
 
     private enum ViewMode {
         LIST,              // Individual transactions with pagination
@@ -169,6 +173,8 @@ public class MainActivity extends AppCompatActivity {
         // Initialize the SmartLoadingStrategy
         initializeSmartLoadingStrategy();
 
+        setupQuickEntryFeature();
+
         // Load user's view mode preference
         boolean preferGroupedView = preferencesManager.getViewModePreference();
         int groupingMode = preferencesManager.getGroupingModePreference();
@@ -200,6 +206,15 @@ public class MainActivity extends AppCompatActivity {
         if (smartLoadingStrategy != null) {
             smartLoadingStrategy.setGroupingMode(groupingMode);
             smartLoadingStrategy.setForceViewMode(preferGroupedView);
+        }
+    }
+
+    private void setupQuickEntryFeature() {
+        MaterialButton addCashButton = findViewById(R.id.addCashButton);
+        if (addCashButton != null) {
+            addCashButton.setOnClickListener(v -> {
+                showQuickEntryFragment();
+            });
         }
     }
 
@@ -1391,61 +1406,6 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
-//    private void setupCollapsibleSpendingChart() {
-//        // Find the card and chart views
-//        MaterialCardView spendingChartCard = findViewById(R.id.spendingChartCard);
-//        LineChart spendingLineChart = findViewById(R.id.spendingLineChart);
-//
-//        // Need to add a header layout with a title and toggle button
-//        LinearLayout chartHeader = findViewById(R.id.chartHeaderLayout);
-//        ImageView toggleIcon = findViewById(R.id.chartToggleIcon);
-//
-//        // Get saved state from preferences
-//        boolean isExpanded = preferencesManager.isChartExpanded();
-//
-//        // Initialize visibility based on saved state
-//        spendingLineChart.setVisibility(isExpanded ? View.VISIBLE : View.GONE);
-//        toggleIcon.setImageResource(isExpanded ? R.drawable.ic_expand_less : R.drawable.ic_expand_more);
-//
-//        // Load animations
-//        Animation slideIn = AnimationUtils.loadAnimation(this, R.anim.slide_down);
-//        Animation slideOut = AnimationUtils.loadAnimation(this, R.anim.slide_up);
-//
-//        // Set click listener on the header to toggle chart visibility
-//        chartHeader.setOnClickListener(v -> {
-//            boolean willBeExpanded = spendingLineChart.getVisibility() != View.VISIBLE;
-//
-//            if (!willBeExpanded) {
-//                // Collapse the chart with animation
-//                spendingLineChart.startAnimation(slideOut);
-//                slideOut.setAnimationListener(new Animation.AnimationListener() {
-//                    @Override
-//                    public void onAnimationStart(Animation animation) {}
-//
-//                    @Override
-//                    public void onAnimationEnd(Animation animation) {
-//                        spendingLineChart.setVisibility(View.GONE);
-//                    }
-//
-//                    @Override
-//                    public void onAnimationRepeat(Animation animation) {}
-//                });
-//                toggleIcon.setImageResource(R.drawable.ic_expand_more);
-//            } else {
-//                // Expand the chart with animation
-//                spendingLineChart.setVisibility(View.VISIBLE);
-//                spendingLineChart.startAnimation(slideIn);
-//                toggleIcon.setImageResource(R.drawable.ic_expand_less);
-//
-//                // Refresh chart data when expanding
-//                updateSpendingChart();
-//            }
-//
-//            // Save the new state
-//            preferencesManager.saveChartExpandedState(willBeExpanded);
-//        });
-//    }
-
     private void showAdvancedFilterDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_advanced_filter, null);
@@ -2178,6 +2138,93 @@ public class MainActivity extends AppCompatActivity {
             });
         }
     }
+
+    /**
+     * Show the Quick Entry as a bottom sheet dialog
+     */
+    private void showQuickEntryFragment() {
+        // Always allow showing the bottom sheet, regardless of state
+        // This fixes the issue where it won't reappear after drag dismiss
+
+        // Create new instance of QuickEntryFragment (now a BottomSheetDialogFragment)
+        QuickEntryFragment quickEntryFragment = new QuickEntryFragment();
+
+        // Show as a bottom sheet
+        quickEntryFragment.show(getSupportFragmentManager(), "QuickEntryBottomSheet");
+
+        // Update state
+        isQuickEntryVisible = true;
+    }
+
+    /**
+     * Called when QuickEntry bottom sheet is dismissed
+     */
+    public void onQuickEntryDismissed() {
+        isQuickEntryVisible = false;
+    }
+
+    /**
+     * Hide the Quick Entry fragment
+     */
+    private void hideQuickEntryFragment() {
+        if (!isQuickEntryVisible) return;
+
+        // Find and dismiss the bottom sheet
+        QuickEntryFragment fragment = (QuickEntryFragment) getSupportFragmentManager()
+                .findFragmentByTag("QuickEntryBottomSheet");
+        if (fragment != null) {
+            fragment.dismiss();
+        }
+
+        // Update state
+        isQuickEntryVisible = false;
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (isQuickEntryVisible) {
+            hideQuickEntryFragment();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    @Override
+    public void onTransactionAdded(Transaction transaction) {
+        // Handle the newly added transaction
+        // This might include updating UI, showing confirmation, etc.
+
+        // Example: Show a confirmation Snackbar
+        Snackbar.make(
+                findViewById(android.R.id.content),
+                "Cash transaction added: ₹" + transaction.getAmount(),
+                Snackbar.LENGTH_LONG
+        ).show();
+
+        // Refresh transactions
+        refreshTransactions();
+
+        // Hide the quick entry fragment
+        hideQuickEntryFragment();
+    }
+
+    @Override
+    public void onMultipleTransactionsAdded() {
+        // Handle when user adds multiple transactions
+
+        // Refresh transactions
+        refreshTransactions();
+
+        // Show confirmation
+        Snackbar.make(
+                findViewById(android.R.id.content),
+                "Multiple transactions added",
+                Snackbar.LENGTH_LONG
+        ).show();
+
+        // Don't hide the fragment, as user is adding multiple entries
+    }
+
 
     private void showDatePicker(boolean isFromDate) {
         Calendar calendar = Calendar.getInstance();

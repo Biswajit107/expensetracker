@@ -191,4 +191,135 @@ public class PreferencesManager {
                 .remove(KEY_SELECTED_CHART_MONTH)
                 .apply();
     }
+
+    // Add these methods to your existing PreferencesManager.java class
+
+    /**
+     * Save a String preference value
+     */
+    public void savePreference(String key, String value) {
+        prefs.edit().putString(key, value).apply();
+    }
+
+    /**
+     * Get a String preference value
+     */
+    public String getPreference(String key, String defaultValue) {
+        return prefs.getString(key, defaultValue);
+    }
+
+    /**
+     * Save an int preference value
+     */
+    public void savePreference(String key, int value) {
+        prefs.edit().putInt(key, value).apply();
+    }
+
+    /**
+     * Get an int preference value
+     */
+    public int getPreference(String key, int defaultValue) {
+        return prefs.getInt(key, defaultValue);
+    }
+
+    /**
+     * Save a long preference value
+     */
+    public void savePreference(String key, long value) {
+        prefs.edit().putLong(key, value).apply();
+    }
+
+    /**
+     * Get a long preference value
+     */
+    public long getPreference(String key, long defaultValue) {
+        return prefs.getLong(key, defaultValue);
+    }
+
+    /**
+     * Save a boolean preference value
+     */
+    public void savePreference(String key, boolean value) {
+        prefs.edit().putBoolean(key, value).apply();
+    }
+
+    /**
+     * Get a boolean preference value
+     */
+    public boolean getPreference(String key, boolean defaultValue) {
+        return prefs.getBoolean(key, defaultValue);
+    }
+
+    /**
+     * Save a float preference value
+     */
+    public void savePreference(String key, float value) {
+        prefs.edit().putFloat(key, value).apply();
+    }
+
+    /**
+     * Get a float preference value
+     */
+    public float getPreference(String key, float defaultValue) {
+        return prefs.getFloat(key, defaultValue);
+    }
+
+    /**
+     * Save a double preference value
+     * (Stored as float since SharedPreferences doesn't support double directly)
+     */
+    public void savePreference(String key, double value) {
+        prefs.edit().putFloat(key, (float) value).apply();
+    }
+
+    /**
+     * Get a double preference value
+     */
+    public double getPreference(String key, double defaultValue) {
+        return prefs.getFloat(key, (float) defaultValue);
+    }
+
+    /**
+     * Check if a preference key exists
+     */
+    public boolean hasPreference(String key) {
+        return prefs.contains(key);
+    }
+
+    /**
+     * Remove a preference
+     */
+    public void removePreference(String key) {
+        prefs.edit().remove(key).apply();
+    }
+
+    /**
+     * Save last used quick entry preferences
+     */
+    public void saveQuickEntryPreferences(String category, double amount) {
+        savePreference("last_quick_entry_category", category);
+        savePreference("last_quick_entry_amount", amount);
+        savePreference("last_quick_entry_time", System.currentTimeMillis());
+    }
+
+    /**
+     * Get last used category in quick entry
+     */
+    public String getLastQuickEntryCategory() {
+        return getPreference("last_quick_entry_category", "");
+    }
+
+    /**
+     * Get last used amount in quick entry
+     */
+    public double getLastQuickEntryAmount() {
+        return getPreference("last_quick_entry_amount", 0.0);
+    }
+
+    /**
+     * Get last time quick entry was used
+     */
+    public long getLastQuickEntryTime() {
+        return getPreference("last_quick_entry_time", 0L);
+    }
 }

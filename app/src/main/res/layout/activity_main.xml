@@ -123,13 +123,18 @@
                 android:layout_weight="1"
                 android:textColor="@color/white"
                 android:text="From"
+                android:textSize="12sp"
+                android:minWidth="0dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
                 app:icon="@drawable/ic_calendar"
-                app:iconTint="@color/white"/>
+                app:iconTint="@color/white"
+                app:iconSize="16dp"/>
 
             <View
                 android:layout_width="1dp"
                 android:layout_height="match_parent"
-                android:layout_margin="8dp"
+                android:layout_margin="4dp"
                 android:background="@color/white"
                 android:alpha="0.3"/>
 
@@ -141,17 +146,45 @@
                 android:layout_weight="1"
                 android:textColor="@color/white"
                 android:text="To"
+                android:textSize="12sp"
+                android:minWidth="0dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
                 app:icon="@drawable/ic_calendar"
-                app:iconTint="@color/white"/>
+                app:iconTint="@color/white"
+                app:iconSize="16dp"/>
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/loadMessagesButton"
                 style="@style/Widget.MaterialComponents.Button.TextButton.Icon"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="4dp"
+                android:minWidth="0dp"
+                android:insetLeft="0dp"
+                android:insetTop="0dp"
+                android:insetRight="0dp"
+                android:insetBottom="0dp"
+                app:iconPadding="0dp"
+                app:iconGravity="textStart"
+                app:iconSize="20dp"
                 android:textColor="@color/white"
                 app:iconTint="@color/white"
                 app:icon="@drawable/ic_refresh"/>
+
+            <!-- Add Manual Transaction button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/addCashButton"
+                style="@style/Widget.MaterialComponents.Button.TextButton.Icon"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="@color/white"
+                app:iconTint="@color/white"
+                app:iconSize="28dp"
+                app:icon="@drawable/ic_add_cash"
+                android:contentDescription="Add Manual Transaction"/>
+
         </LinearLayout>
     </com.google.android.material.appbar.AppBarLayout>
 
@@ -557,6 +590,7 @@
             </FrameLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+
 
     <!-- Bottom Navigation -->
     <com.google.android.material.bottomnavigation.BottomNavigationView
