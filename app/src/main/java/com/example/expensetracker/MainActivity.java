@@ -164,7 +164,6 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
         setupSort();
         setupExpandableSearch();
 
-        setupSwipeToExclude();
 
         // Check permissions and setup navigation
         checkAndRequestSMSPermissions();
@@ -242,8 +241,25 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
             showEditTransactionDialog(transaction);
         });
 
-        // Set up swipe to exclude functionality
-        smartLoadingStrategy.setupSwipeToExclude(this, this::excludeTransactionManually);
+        // Set long-click listener for delete functionality (only for manually excluded transactions)
+        smartLoadingStrategy.setOnTransactionLongClickListener(transaction -> {
+            if (currentFilterState.viewingManuallyExcluded) {
+                showDeleteTransactionDialog(transaction);
+            }
+        });
+
+        // Set up swipe functionality (exclude or delete based on context)
+        smartLoadingStrategy.setupSwipeToExclude(this, new SwipeToExcludeCallback.SwipeActionListener() {
+            @Override
+            public void onSwipeToExclude(Transaction transaction) {
+                excludeTransactionManually(transaction);
+            }
+            
+            @Override
+            public void onSwipeToDelete(Transaction transaction) {
+                deleteTransaction(transaction);
+            }
+        });
 
         // Log the initial view mode
         Log.d(TAG, "Starting with " + (preferencesManager.getViewModePreference() ? "grouped" : "list") + " view based on user preference");
@@ -560,6 +576,13 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
             showEditTransactionDialog(transaction);
         });
 
+        // Set long-click listener for delete option (only for manually excluded transactions)
+        adapter.setOnTransactionLongClickListener(transaction -> {
+            if (currentFilterState.viewingManuallyExcluded) {
+                showDeleteTransactionDialog(transaction);
+            }
+        });
+
         adapter.setOnCategoryClickListener((transaction, categoryView) -> {
             showCategorySelectionDialog(transaction, categoryView);
         });
@@ -608,29 +631,6 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
     }
 
 
-    // Add this method to the MainActivity class after setupRecyclerView() method
-    private void setupSwipeToExclude() {
-        RecyclerView recyclerView = findViewById(R.id.recyclerView);
-        if (recyclerView == null) {
-            Log.e(TAG, "RecyclerView not found when setting up swipe to exclude");
-            return;
-        }
-
-        // Create the SwipeToExcludeCallback
-        SwipeToExcludeCallback swipeCallback = new SwipeToExcludeCallback(
-                this,
-                adapter,
-                transaction -> {
-                    // This is called when a transaction is swiped
-                    // Handle the exclusion of the transaction
-                    excludeTransactionManually(transaction);
-                }
-        );
-
-        // Attach the callback to the RecyclerView
-        ItemTouchHelper itemTouchHelper = new ItemTouchHelper(swipeCallback);
-        itemTouchHelper.attachToRecyclerView(recyclerView);
-    }
 
     // Add this method to handle the exclusion action
     public void excludeTransactionManually(Transaction transaction) {
@@ -693,6 +693,25 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
 
         // Show the dialog
         dialog.show(getSupportFragmentManager(), "edit_transaction");
+    }
+
+    private void showDeleteTransactionDialog(Transaction transaction) {
+        new AlertDialog.Builder(this)
+                .setTitle("Delete Transaction")
+                .setMessage("Are you sure you want to permanently delete this transaction?\n\n" +
+                        "Description: " + transaction.getDescription() + "\n" +
+                        "Amount: ₹" + String.format("%.2f", transaction.getAmount()))
+                .setPositiveButton("Delete", (dialog, which) -> {
+                    deleteTransaction(transaction);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    public void deleteTransaction(Transaction transaction) {
+        if (smartLoadingStrategy != null) {
+            smartLoadingStrategy.deleteTransactionFromAdapters(transaction);
+        }
     }
 
     /**
@@ -984,6 +1003,7 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
     private void loadManuallyExcludedTransactions() {
         // Update filter state
         currentFilterState.viewingManuallyExcluded = true;
+        currentFilterState.category = null; // Clear any category filter
 
         // Update filter indicator UI immediately
         if (filterIndicatorContainer != null) {
@@ -2565,5 +2585,13 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
      */
     public long getToDate() {
         return toDate;
+    }
+
+    /**
+     * Check if currently viewing manually excluded transactions
+     * @return true if viewing manually excluded transactions
+     */
+    public boolean isViewingManuallyExcluded() {
+        return currentFilterState.viewingManuallyExcluded;
     }
 }

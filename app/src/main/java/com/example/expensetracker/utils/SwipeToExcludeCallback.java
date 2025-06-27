@@ -26,29 +26,48 @@ public class SwipeToExcludeCallback extends ItemTouchHelper.SimpleCallback {
     private final Paint textPaint;
     private final String swipeText;
     private final SwipeActionListener listener;
+    private final SwipeActionType actionType;
+
+    public enum SwipeActionType {
+        EXCLUDE, DELETE
+    }
 
     public interface SwipeActionListener {
         void onSwipeToExclude(Transaction transaction);
+        void onSwipeToDelete(Transaction transaction);
     }
 
     public SwipeToExcludeCallback(Context context, TransactionAdapter adapter, SwipeActionListener listener) {
+        this(context, adapter, listener, SwipeActionType.EXCLUDE);
+    }
+
+    public SwipeToExcludeCallback(Context context, TransactionAdapter adapter, SwipeActionListener listener, SwipeActionType actionType) {
         // Only enable right swipe, disable drag
         super(0, ItemTouchHelper.RIGHT);
 
         this.adapter = adapter;
         this.listener = listener;
+        this.actionType = actionType;
+        
+        android.util.Log.d("SwipeToExcludeCallback", "Created SwipeToExcludeCallback with actionType: " + actionType);
 
-        // Set up the purple background for excluded transactions
-        background = new ColorDrawable(ContextCompat.getColor(context, R.color.purple_light));
-
-        // Set up the icon to show during swipe
-        icon = ContextCompat.getDrawable(context, R.drawable.ic_exclude);
+        // Set up styling based on action type
+        if (actionType == SwipeActionType.DELETE) {
+            // Red background and delete icon for delete action
+            background = new ColorDrawable(ContextCompat.getColor(context, R.color.red));
+            icon = ContextCompat.getDrawable(context, R.drawable.ic_remove);
+            swipeText = "Delete";
+        } else {
+            // Purple background and exclude icon for exclude action
+            background = new ColorDrawable(ContextCompat.getColor(context, R.color.purple_light));
+            icon = ContextCompat.getDrawable(context, R.drawable.ic_exclude);
+            swipeText = "Exclude";
+        }
 
         // Margin for the icon
         iconMargin = context.getResources().getDimensionPixelSize(R.dimen.swipe_icon_margin);
 
         // Set up text to display during swipe
-        swipeText = "Exclude";
         textPaint = new Paint();
         textPaint.setColor(Color.WHITE);
         textPaint.setTextSize(context.getResources().getDimensionPixelSize(R.dimen.swipe_text_size));
@@ -78,9 +97,13 @@ public class SwipeToExcludeCallback extends ItemTouchHelper.SimpleCallback {
         // Get the transaction that was swiped
         Transaction transaction = adapter.getTransactions().get(position);
 
-        // Notify the listener that the user wants to exclude this transaction
+        // Notify the listener based on action type
         if (listener != null) {
-            listener.onSwipeToExclude(transaction);
+            if (actionType == SwipeActionType.DELETE) {
+                listener.onSwipeToDelete(transaction);
+            } else {
+                listener.onSwipeToExclude(transaction);
+            }
         }
     }
 

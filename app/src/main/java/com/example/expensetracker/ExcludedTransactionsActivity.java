@@ -71,11 +71,16 @@ public class ExcludedTransactionsActivity extends AppCompatActivity {
             showTransactionEditDialog(transaction);
         });
 
+        // Set up long-press listener for delete option
+        adapter.setOnTransactionLongClickListener(transaction -> {
+            showDeleteTransactionDialog(transaction);
+        });
+
         // Set up filter chips
         setupFilterChips();
 
-        // Set up include all button
-        includeAllFab.setOnClickListener(v -> showIncludeAllDialog());
+        // Set up include all button with menu options
+        includeAllFab.setOnClickListener(v -> showActionMenu());
 
         // Initialize executor service
         executorService = Executors.newSingleThreadExecutor();
@@ -220,6 +225,49 @@ public class ExcludedTransactionsActivity extends AppCompatActivity {
         });
     }
 
+    private void showDeleteTransactionDialog(Transaction transaction) {
+        new AlertDialog.Builder(this)
+                .setTitle("Delete Transaction")
+                .setMessage("Are you sure you want to permanently delete this transaction?\n\n" +
+                        "Description: " + transaction.getDescription() + "\n" +
+                        "Amount: ₹" + String.format("%.2f", transaction.getAmount()))
+                .setPositiveButton("Delete", (dialog, which) -> {
+                    deleteTransaction(transaction);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void deleteTransaction(Transaction transaction) {
+        executorService.execute(() -> {
+            TransactionDao dao = TransactionDatabase.getInstance(this).transactionDao();
+            dao.deleteTransactionById(transaction.getId());
+
+            runOnUiThread(() -> {
+                Toast.makeText(this, "Transaction deleted", Toast.LENGTH_SHORT).show();
+                loadTransactions();
+            });
+        });
+    }
+
+    private void showActionMenu() {
+        String[] options = {"Include All", "Delete All"};
+        
+        new AlertDialog.Builder(this)
+                .setTitle("Choose Action")
+                .setItems(options, (dialog, which) -> {
+                    switch (which) {
+                        case 0:
+                            showIncludeAllDialog();
+                            break;
+                        case 1:
+                            showDeleteAllDialog();
+                            break;
+                    }
+                })
+                .show();
+    }
+
     private void showIncludeAllDialog() {
         String message;
         switch (currentFilter) {
@@ -293,6 +341,73 @@ public class ExcludedTransactionsActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 Toast.makeText(this,
                         updateCount + " transactions included in totals",
+                        Toast.LENGTH_SHORT).show();
+                loadTransactions();
+            });
+        });
+    }
+
+    private void showDeleteAllDialog() {
+        String message;
+        switch (currentFilter) {
+            case FILTER_DUPLICATES:
+                message = "Are you sure you want to permanently delete all duplicate transactions?";
+                break;
+            case FILTER_UNKNOWN_SOURCE:
+                message = "Are you sure you want to permanently delete all unknown source transactions?";
+                break;
+            case FILTER_ALL:
+            default:
+                message = "Are you sure you want to permanently delete all automatically excluded transactions?";
+                break;
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Delete All")
+                .setMessage(message + "\n\nThis action cannot be undone!")
+                .setPositiveButton("Delete All", (dialog, which) -> {
+                    deleteAllTransactions();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void deleteAllTransactions() {
+        executorService.execute(() -> {
+            TransactionDao dao = TransactionDatabase.getInstance(this).transactionDao();
+            int count = 0;
+
+            switch (currentFilter) {
+                case FILTER_DUPLICATES:
+                    List<Transaction> duplicates = dao.getDuplicateTransactionsSync();
+                    for (Transaction transaction : duplicates) {
+                        dao.deleteTransactionById(transaction.getId());
+                        count++;
+                    }
+                    break;
+
+                case FILTER_UNKNOWN_SOURCE:
+                    List<Transaction> unknown = dao.getUnknownSourceExcludedTransactionsSync();
+                    for (Transaction transaction : unknown) {
+                        dao.deleteTransactionById(transaction.getId());
+                        count++;
+                    }
+                    break;
+
+                case FILTER_ALL:
+                default:
+                    List<Transaction> all = dao.getAllAutomaticallyExcludedTransactionsSync();
+                    for (Transaction transaction : all) {
+                        dao.deleteTransactionById(transaction.getId());
+                        count++;
+                    }
+                    break;
+            }
+
+            final int deleteCount = count;
+            runOnUiThread(() -> {
+                Toast.makeText(this,
+                        deleteCount + " transactions deleted permanently",
                         Toast.LENGTH_SHORT).show();
                 loadTransactions();
             });

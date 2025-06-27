@@ -56,6 +56,7 @@ public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGrou
     private final Context context;
     private List<DateGroup> dateGroups = new ArrayList<>();
     private TransactionAdapter.OnTransactionClickListener listener;
+    private TransactionAdapter.OnTransactionLongClickListener longClickListener;
     private int currentGroupingMode = GROUP_BY_DAY; // Default to day grouping
 
     public DateGroupedTransactionAdapter(Context context) {
@@ -67,6 +68,16 @@ public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGrou
      */
     public void setOnTransactionClickListener(TransactionAdapter.OnTransactionClickListener listener) {
         this.listener = listener;
+
+        // Update listener in any existing nested adapters
+        notifyDataSetChanged();
+    }
+
+    /**
+     * Set the transaction long-click listener that will be passed to the nested TransactionAdapter
+     */
+    public void setOnTransactionLongClickListener(TransactionAdapter.OnTransactionLongClickListener longClickListener) {
+        this.longClickListener = longClickListener;
 
         // Update listener in any existing nested adapters
         notifyDataSetChanged();
@@ -722,18 +733,14 @@ public class DateGroupedTransactionAdapter extends RecyclerView.Adapter<DateGrou
                 if (listener != null) {
                     nestedAdapter.setOnTransactionClickListener(listener);
                 }
+                if (longClickListener != null) {
+                    nestedAdapter.setOnTransactionLongClickListener(longClickListener);
+                }
                 nestedAdapter.setTransactions(group.getTransactions());
                 nestedTransactionList.setAdapter(nestedAdapter);
 
-                if (context instanceof MainActivity) {
-                    SwipeToExcludeCallback swipeCallback = new SwipeToExcludeCallback(
-                            context,
-                            nestedAdapter,
-                            transaction -> ((MainActivity) context).excludeTransactionManually(transaction)
-                    );
-                    ItemTouchHelper itemTouchHelper = new ItemTouchHelper(swipeCallback);
-                    itemTouchHelper.attachToRecyclerView(nestedTransactionList);
-                }
+                // Swipe functionality is handled by SmartLoadingStrategy
+                // which will set up the correct swipe behavior based on current view mode
             }
         }
 

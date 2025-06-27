@@ -120,6 +120,8 @@ public class SmartLoadingStrategy {
         filterState.showingExcluded = mainFilterState.showingExcluded;
         filterState.sortOption = mainFilterState.sortOption;
         filterState.viewingManuallyExcluded = mainFilterState.viewingManuallyExcluded;
+        
+        
         return filterState;
     }
 
@@ -139,6 +141,14 @@ public class SmartLoadingStrategy {
     }
 
     /**
+     * Set transaction long-click listener for both adapters
+     */
+    public void setOnTransactionLongClickListener(TransactionAdapter.OnTransactionLongClickListener listener) {
+        transactionAdapter.setOnTransactionLongClickListener(listener);
+        groupedAdapter.setOnTransactionLongClickListener(listener);
+    }
+
+    /**
      * Setup swipe-to-exclude functionality on the current RecyclerView
      * This needs to be called whenever the adapter changes
      *
@@ -148,15 +158,21 @@ public class SmartLoadingStrategy {
     public void setupSwipeToExclude(Context context, SwipeToExcludeCallback.SwipeActionListener listener) {
         if (recyclerView == null) return;
 
+        // Determine the action type based on current filter state
+        SwipeToExcludeCallback.SwipeActionType actionType = currentFilterState.viewingManuallyExcluded ? 
+                SwipeToExcludeCallback.SwipeActionType.DELETE : 
+                SwipeToExcludeCallback.SwipeActionType.EXCLUDE;
+                
+
         // Create the SwipeToExcludeCallback
         SwipeToExcludeCallback swipeCallback;
 
         if (isGroupedViewActive) {
             // For grouped view, create a special swipe handler for the nested RecyclerViews
-            setupGroupedSwipeToExclude(context, listener);
+            setupGroupedSwipeToExclude(context, listener, actionType);
         } else {
             // For regular list view, attach the swipe handler to the main RecyclerView
-            swipeCallback = new SwipeToExcludeCallback(context, transactionAdapter, listener);
+            swipeCallback = new SwipeToExcludeCallback(context, transactionAdapter, listener, actionType);
             ItemTouchHelper itemTouchHelper = new ItemTouchHelper(swipeCallback);
             itemTouchHelper.attachToRecyclerView(recyclerView);
         }
@@ -166,7 +182,7 @@ public class SmartLoadingStrategy {
      * Special handling for setting up swipe in grouped view
      * We need to find all nested RecyclerViews and attach the swipe handler to each
      */
-    private void setupGroupedSwipeToExclude(Context context, SwipeToExcludeCallback.SwipeActionListener listener) {
+    private void setupGroupedSwipeToExclude(Context context, SwipeToExcludeCallback.SwipeActionListener listener, SwipeToExcludeCallback.SwipeActionType actionType) {
         if (recyclerView == null || groupedAdapter == null) return;
 
         // We need to find the nested RecyclerViews inside each group
@@ -179,11 +195,12 @@ public class SmartLoadingStrategy {
                     // Get the adapter
                     RecyclerView.Adapter<?> nestedAdapter = nestedList.getAdapter();
                     if (nestedAdapter instanceof TransactionAdapter) {
-                        // Attach swipe handler to this nested list
+                        // Attach swipe handler to this nested list with the appropriate action type
                         SwipeToExcludeCallback swipeCallback = new SwipeToExcludeCallback(
                                 context,
                                 (TransactionAdapter) nestedAdapter,
-                                listener
+                                listener,
+                                actionType
                         );
                         ItemTouchHelper itemTouchHelper = new ItemTouchHelper(swipeCallback);
                         itemTouchHelper.attachToRecyclerView(nestedList);
@@ -400,6 +417,25 @@ public class SmartLoadingStrategy {
 
                             // Update transaction count indicators if filters are active
                             updateFilterIndicator(finalTransactions);
+                            
+                            // Re-setup swipe functionality with correct action type for grouped view
+                            // Delay slightly to ensure grouped adapter has set up nested views
+                            if (context instanceof MainActivity) {
+                                MainActivity activity = (MainActivity) context;
+                                activity.runOnUiThread(() -> {
+                                    setupSwipeToExclude(context, new SwipeToExcludeCallback.SwipeActionListener() {
+                                        @Override
+                                        public void onSwipeToExclude(Transaction transaction) {
+                                            activity.excludeTransactionManually(transaction);
+                                        }
+                                        
+                                        @Override
+                                        public void onSwipeToDelete(Transaction transaction) {
+                                            activity.deleteTransaction(transaction);
+                                        }
+                                    });
+                                });
+                            }
                         } else {
                             // Show empty state
                             if (emptyStateText != null) {
@@ -480,6 +516,22 @@ public class SmartLoadingStrategy {
 
                             // Update transaction count indicators if filters are active
                             updateFilterIndicator(finalTransactions);
+                            
+                            // Re-setup swipe functionality with correct action type
+                            if (context instanceof MainActivity) {
+                                MainActivity activity = (MainActivity) context;
+                                setupSwipeToExclude(context, new SwipeToExcludeCallback.SwipeActionListener() {
+                                    @Override
+                                    public void onSwipeToExclude(Transaction transaction) {
+                                        activity.excludeTransactionManually(transaction);
+                                    }
+                                    
+                                    @Override
+                                    public void onSwipeToDelete(Transaction transaction) {
+                                        activity.deleteTransaction(transaction);
+                                    }
+                                });
+                            }
                         } else {
                             // Show empty state
                             if (emptyStateText != null) {
@@ -622,8 +674,16 @@ public class SmartLoadingStrategy {
                 // Re-setup swipe handlers if this is an Activity context
                 if (context instanceof MainActivity) {
                     MainActivity activity = (MainActivity) context;
-                    setupSwipeToExclude(context, transaction -> {
-                        activity.excludeTransactionManually(transaction);
+                    setupSwipeToExclude(context, new SwipeToExcludeCallback.SwipeActionListener() {
+                        @Override
+                        public void onSwipeToExclude(Transaction transaction) {
+                            activity.excludeTransactionManually(transaction);
+                        }
+                        
+                        @Override
+                        public void onSwipeToDelete(Transaction transaction) {
+                            activity.deleteTransaction(transaction);
+                        }
                     });
                 }
             });
@@ -666,6 +726,48 @@ public class SmartLoadingStrategy {
                 }
             });
         }
+    }
+
+    /**
+     * Delete a transaction from both adapters and database
+     */
+    public void deleteTransactionFromAdapters(Transaction transactionToDelete) {
+        executorService.execute(() -> {
+            // Delete from database
+            TransactionDao dao = TransactionDatabase.getInstance(context).transactionDao();
+            dao.deleteTransactionById(transactionToDelete.getId());
+
+            // Update UI on main thread
+            if (context instanceof android.app.Activity) {
+                ((android.app.Activity) context).runOnUiThread(() -> {
+                    // Remove from transaction adapter if it's being used
+                    if (!isGroupedViewActive) {
+                        List<Transaction> currentTransactions = transactionAdapter.getTransactions();
+                        for (int i = 0; i < currentTransactions.size(); i++) {
+                            Transaction transaction = currentTransactions.get(i);
+                            if (transaction.getId() == transactionToDelete.getId()) {
+                                currentTransactions.remove(i);
+                                transactionAdapter.notifyItemRemoved(i);
+                                break;
+                            }
+                        }
+                    } else {
+                        // For grouped adapter, reload the data
+                        if (currentFilterState.viewingManuallyExcluded) {
+                            loadGroupedTransactions(0, System.currentTimeMillis()); // Reload all
+                        } else {
+                            if (context instanceof MainActivity) {
+                                MainActivity activity = (MainActivity) context;
+                                loadGroupedTransactions(activity.getFromDate(), activity.getToDate());
+                            }
+                        }
+                    }
+
+                    // Show confirmation
+                    Toast.makeText(context, "Transaction deleted", Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
     }
 
     /**

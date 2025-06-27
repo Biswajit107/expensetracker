@@ -173,4 +173,10 @@ public interface TransactionDao {
 
     @Query("SELECT * FROM transactions WHERE date BETWEEN :startDate AND :endDate ORDER BY date ASC")
     List<Transaction> getTransactionsBetweenDatesSyncAscending(long startDate, long endDate);
+
+    /**
+     * Delete a transaction by ID
+     */
+    @Query("DELETE FROM transactions WHERE id = :transactionId")
+    void deleteTransactionById(long transactionId);
 }

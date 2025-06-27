@@ -35,9 +35,21 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
         void onTransactionClick(Transaction transaction);
     }
 
+    // Interface for long-click handling
+    public interface OnTransactionLongClickListener {
+        void onTransactionLongClick(Transaction transaction);
+    }
+
     // Set click listener
     public void setOnTransactionClickListener(OnTransactionClickListener listener) {
         this.listener = listener;
+    }
+
+    private OnTransactionLongClickListener longClickListener;
+
+    // Set long-click listener
+    public void setOnTransactionLongClickListener(OnTransactionLongClickListener listener) {
+        this.longClickListener = listener;
     }
 
     // Add a new listener interface for category clicks
@@ -103,6 +115,16 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
                 if (position != RecyclerView.NO_POSITION && listener != null) {
                     listener.onTransactionClick(transactions.get(position));
                 }
+            });
+
+            // Set long-click listener
+            itemView.setOnLongClickListener(v -> {
+                int position = getAdapterPosition();
+                if (position != RecyclerView.NO_POSITION && longClickListener != null) {
+                    longClickListener.onTransactionLongClick(transactions.get(position));
+                    return true;
+                }
+                return false;
             });
         }
 
