@@ -3,6 +3,7 @@ package com.example.expensetracker;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import com.google.android.material.appbar.AppBarLayout;
 
 import android.content.Context;
 import android.view.KeyEvent;
@@ -50,6 +51,7 @@ import android.widget.Toast;
 import com.example.expensetracker.adapters.DateGroupedTransactionAdapter;
 import com.example.expensetracker.adapters.TransactionAdapter;
 import com.example.expensetracker.database.TransactionDatabase;
+import com.example.expensetracker.database.TransactionDao;
 import com.example.expensetracker.dialogs.CategorySelectionDialog;
 import com.example.expensetracker.dialogs.TransactionEditDialog;
 import com.example.expensetracker.models.Transaction;
@@ -101,6 +103,12 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
     private TextView totalDebitsText;
     private TextView totalCreditsText;
     private TextView balanceText;
+    
+    // Collapsed summary views
+    private LinearLayout collapsedSummaryLayout;
+    private TextView collapsedBalanceText;
+    private TextView collapsedIncomeText;
+    private TextView collapsedExpensesText;
     private MaterialCardView alertCard;
     private TextView alertText;
     private ProgressBar loadingIndicator;
@@ -163,7 +171,7 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
         setupBudgetFab();
         setupSort();
         setupExpandableSearch();
-
+        setupCollapsedSummary();
 
         // Check permissions and setup navigation
         checkAndRequestSMSPermissions();
@@ -206,6 +214,9 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
             smartLoadingStrategy.setGroupingMode(groupingMode);
             smartLoadingStrategy.setForceViewMode(preferGroupedView);
         }
+        
+        // Load saved filter preferences
+        loadSavedFilterState();
     }
 
     private void setupQuickEntryFeature() {
@@ -254,11 +265,7 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
             public void onSwipeToExclude(Transaction transaction) {
                 excludeTransactionManually(transaction);
             }
-            
-            @Override
-            public void onSwipeToDelete(Transaction transaction) {
-                deleteTransaction(transaction);
-            }
+
         });
 
         // Log the initial view mode
@@ -274,6 +281,12 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
         alertText = findViewById(R.id.alertText);
         loadingIndicator = findViewById(R.id.loadingIndicator);
         emptyStateText = findViewById(R.id.emptyStateText);
+        
+        // Find collapsed summary views
+        collapsedSummaryLayout = findViewById(R.id.collapsedSummaryLayout);
+        collapsedBalanceText = findViewById(R.id.collapsedBalanceText);
+        collapsedIncomeText = findViewById(R.id.collapsedIncomeText);
+        collapsedExpensesText = findViewById(R.id.collapsedExpensesText);
 
         // Find input and action elements
         searchInput = findViewById(R.id.searchInput);
@@ -290,7 +303,13 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
 
         // Set up filter button click listener
         if (filterButton != null) {
-            filterButton.setOnClickListener(v -> showAdvancedFilterDialog());
+            Log.d("MainActivity", "Filter button found and click listener set");
+            filterButton.setOnClickListener(v -> {
+                Log.d("MainActivity", "Filter button clicked!");
+                showAdvancedFilterDialog();
+            });
+        } else {
+            Log.e("MainActivity", "Filter button is null!");
         }
 
         // Set default filter indicator visibility
@@ -303,6 +322,9 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
             clearFilterButton.setOnClickListener(v -> {
                 // Reset filter state
                 currentFilterState = new FilterState();
+
+                // Clear saved filter preferences
+                preferencesManager.clearFilterState();
 
                 // Reset sort in preferences
                 preferencesManager.saveSortOption(0);
@@ -649,9 +671,10 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
         // Update the transaction in the database
         viewModel.updateTransaction(transaction);
 
-        // Update in the adapter
+        // Refresh the view to remove excluded transaction and update summary
         if (smartLoadingStrategy != null) {
-            smartLoadingStrategy.updateTransactionInAdapters(transaction);
+            smartLoadingStrategy.updateFilterState(currentFilterState);
+            smartLoadingStrategy.refreshData(fromDate, toDate);
         }
 
         // Show a confirmation to the user
@@ -666,8 +689,10 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
                     transaction.setExclusionSource("NONE");
                     viewModel.updateTransaction(transaction);
 
+                    // Refresh the view to show restored transaction and update summary
                     if (smartLoadingStrategy != null) {
-                        smartLoadingStrategy.updateTransactionInAdapters(transaction);
+                        smartLoadingStrategy.updateFilterState(currentFilterState);
+                        smartLoadingStrategy.refreshData(fromDate, toDate);
                     }
                 })
                 .show();
@@ -709,9 +734,21 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
     }
 
     public void deleteTransaction(Transaction transaction) {
-        if (smartLoadingStrategy != null) {
-            smartLoadingStrategy.deleteTransactionFromAdapters(transaction);
-        }
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        executorService.execute(() -> {
+            TransactionDao dao = TransactionDatabase.getInstance(this).transactionDao();
+            dao.deleteTransactionById(transaction.getId());
+
+            runOnUiThread(() -> {
+                Toast.makeText(this, "Transaction deleted", Toast.LENGTH_SHORT).show();
+                // Refresh the current view
+                if (smartLoadingStrategy != null) {
+                    smartLoadingStrategy.updateFilterState(currentFilterState);
+                    smartLoadingStrategy.refreshData(fromDate, toDate);
+                }
+            });
+        });
+        executorService.shutdown();
     }
 
     /**
@@ -879,6 +916,25 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
         if (smartLoadingStrategy != null) {
             smartLoadingStrategy.updateFilterState(currentFilterState);
             smartLoadingStrategy.refreshData(fromDate, toDate);
+        }
+    }
+
+    private void setupCollapsedSummary() {
+        AppBarLayout appBarLayout = findViewById(R.id.appBarLayout);
+        if (appBarLayout != null) {
+            appBarLayout.addOnOffsetChangedListener(new AppBarLayout.OnOffsetChangedListener() {
+                @Override
+                public void onOffsetChanged(AppBarLayout appBarLayout, int verticalOffset) {
+                    // Calculate the collapse ratio (0 = fully expanded, 1 = fully collapsed)
+                    float totalScrollRange = appBarLayout.getTotalScrollRange();
+                    float collapseRatio = Math.abs(verticalOffset) / totalScrollRange;
+                    
+                    // Update the alpha of the collapsed summary (fade in as we collapse)
+                    if (collapsedSummaryLayout != null) {
+                        collapsedSummaryLayout.setAlpha(collapseRatio);
+                    }
+                }
+            });
         }
     }
 
@@ -1427,22 +1483,40 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
     }
 
     private void showAdvancedFilterDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_advanced_filter, null);
-        builder.setView(dialogView);
+        Log.d("MainActivity", "showAdvancedFilterDialog() called");
+        try {
+            AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            View dialogView = getLayoutInflater().inflate(R.layout.dialog_advanced_filter, null);
+            builder.setView(dialogView);
 
-        // Initialize dialog views
-        AutoCompleteTextView bankFilterDropdown = dialogView.findViewById(R.id.bankFilterDropdown);
-        AutoCompleteTextView typeFilterDropdown = dialogView.findViewById(R.id.typeFilterDropdown);
-        AutoCompleteTextView categoryFilterDropdown = dialogView.findViewById(R.id.categoryFilterDropdown);
-        RangeSlider amountRangeSlider = dialogView.findViewById(R.id.amountRangeSlider);
-        TextView amountRangeText = dialogView.findViewById(R.id.amountRangeText);
+            // Initialize dialog views with null checks
+            AutoCompleteTextView bankFilterDropdown = dialogView.findViewById(R.id.bankFilterDropdown);
+            AutoCompleteTextView typeFilterDropdown = dialogView.findViewById(R.id.typeFilterDropdown);
+            AutoCompleteTextView categoryFilterDropdown = dialogView.findViewById(R.id.categoryFilterDropdown);
+            RangeSlider amountRangeSlider = dialogView.findViewById(R.id.amountRangeSlider);
+            TextView amountRangeText = dialogView.findViewById(R.id.amountRangeText);
+
+            // Verify critical views exist
+            if (bankFilterDropdown == null || typeFilterDropdown == null || 
+                categoryFilterDropdown == null || amountRangeSlider == null || 
+                amountRangeText == null) {
+                Log.e("MainActivity", "Critical dialog views are null");
+                return;
+            }
 
         // Get the exclude switch
-        androidx.appcompat.widget.SwitchCompat excludeSwitch = dialogView.findViewById(R.id.excludeSwitch);
+        com.google.android.material.switchmaterial.SwitchMaterial excludeSwitch = dialogView.findViewById(R.id.excludeSwitch);
         if (excludeSwitch != null) {
             // Set initial state based on current filter
+            Log.d("MainActivity", "Setting exclude switch to: " + currentFilterState.showingExcluded);
             excludeSwitch.setChecked(currentFilterState.showingExcluded);
+        }
+
+        // Get the recurring switch
+        com.google.android.material.switchmaterial.SwitchMaterial recurringSwitch = dialogView.findViewById(R.id.recurringSwitch);
+        if (recurringSwitch != null) {
+            // Set initial state based on current filter
+            recurringSwitch.setChecked(currentFilterState.recurringOnly);
         }
 
         // Setup filter dropdowns
@@ -1471,6 +1545,7 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
         if (currentFilterState.category != null) {
             categoryFilterDropdown.setText(currentFilterState.category, false);
         }
+
 
         // Set amount range slider
         amountRangeSlider.setValueFrom(0f);
@@ -1504,6 +1579,7 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
             String bank = bankFilterDropdown.getText().toString();
             String type = typeFilterDropdown.getText().toString();
             String category = categoryFilterDropdown.getText().toString();
+            String searchQuery = "";
 
             // Get amount range with safety checks
             double minAmount = 0;
@@ -1517,14 +1593,20 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
             // Get excluded switch state
             boolean showExcluded = excludeSwitch != null && excludeSwitch.isChecked();
 
+            // Get recurring switch state
+            boolean recurringOnly = recurringSwitch != null && recurringSwitch.isChecked();
+
             // Apply filters
-            applyAdvancedFilters(bank, type, category, minAmount, maxAmount, showExcluded);
+            applyAdvancedFilters(bank, type, category, searchQuery, minAmount, maxAmount, showExcluded, recurringOnly);
             dialog.dismiss();
         });
 
         resetButton.setOnClickListener(v -> {
             // Reset all filters
             currentFilterState = new FilterState();
+
+            // Clear saved filter preferences
+            preferencesManager.clearFilterState();
 
             // Hide filter indicators
             if (filterIndicatorContainer != null) {
@@ -1541,10 +1623,13 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
         });
 
         dialog.show();
+        } catch (Exception e) {
+            Log.e("MainActivity", "Error showing filter dialog", e);
+        }
     }
 
-    private void applyAdvancedFilters(String bank, String type, String category,
-                                      double minAmount, double maxAmount, boolean showExcluded) {
+    private void applyAdvancedFilters(String bank, String type, String category, String searchQuery,
+                                      double minAmount, double maxAmount, boolean showExcluded, boolean recurringOnly) {
         // Check if excluded state is changing
         boolean excludedStateChanged = currentFilterState.showingExcluded != showExcluded;
 
@@ -1552,9 +1637,14 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
         currentFilterState.bank = bank;
         currentFilterState.type = type;
         currentFilterState.category = category;
+        currentFilterState.searchQuery = searchQuery;
         currentFilterState.minAmount = minAmount;
         currentFilterState.maxAmount = maxAmount;
         currentFilterState.showingExcluded = showExcluded;
+        currentFilterState.recurringOnly = recurringOnly;
+
+        // Save filter state to preferences
+        saveCurrentFilterState();
 
         // Prepare filter description to display
         StringBuilder filterDesc = new StringBuilder("Filtered by: ");
@@ -2098,6 +2188,9 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
             balanceText.setText(String.format(Locale.getDefault(), "₹%.2f", remainingBalance));
         }
 
+        // Update collapsed summary with mini format
+        updateCollapsedSummary(remainingBalance, totalCredits, totalDebits);
+
         // Budget alert logic
         if (budget > 0) {
             double spendingPercentage = (totalDebits / budget) * 100;
@@ -2129,6 +2222,28 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
 
         if (alertCard != null) {
             alertCard.setVisibility(View.GONE);
+        }
+    }
+
+    private void updateCollapsedSummary(double balance, double totalCredits, double totalDebits) {
+        if (collapsedBalanceText != null) {
+            collapsedBalanceText.setText(String.format(Locale.getDefault(), "₹%.0f", balance));
+        }
+
+        if (collapsedIncomeText != null) {
+            // Format income with 'k' for thousands to save space
+            String incomeText = totalCredits >= 1000 ? 
+                String.format(Locale.getDefault(), "↑₹%.0fk", totalCredits / 1000) :
+                String.format(Locale.getDefault(), "↑₹%.0f", totalCredits);
+            collapsedIncomeText.setText(incomeText);
+        }
+
+        if (collapsedExpensesText != null) {
+            // Format expenses with 'k' for thousands to save space
+            String expenseText = totalDebits >= 1000 ? 
+                String.format(Locale.getDefault(), "↓₹%.0fk", totalDebits / 1000) :
+                String.format(Locale.getDefault(), "↓₹%.0f", totalDebits);
+            collapsedExpensesText.setText(expenseText);
         }
     }
 
@@ -2557,6 +2672,7 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
         public boolean showingExcluded = false;
         public int sortOption = 0; // 0 = Date (newest first)
         public boolean viewingManuallyExcluded = false;
+        public boolean recurringOnly = false;
 
         // Method to check if any filter is active
         public boolean isAnyFilterActive() {
@@ -2567,7 +2683,8 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
                     minAmount > 0 ||
                     maxAmount < 100000 ||
                     showingExcluded ||
-                    viewingManuallyExcluded;
+                    viewingManuallyExcluded ||
+                    recurringOnly;
         }
     }
 
@@ -2593,5 +2710,92 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
      */
     public boolean isViewingManuallyExcluded() {
         return currentFilterState.viewingManuallyExcluded;
+    }
+
+    private void loadSavedFilterState() {
+        // Load saved filter preferences and apply them to current state
+        currentFilterState.bank = preferencesManager.getFilterBank();
+        currentFilterState.type = preferencesManager.getFilterType();
+        currentFilterState.category = preferencesManager.getFilterCategory();
+        currentFilterState.searchQuery = preferencesManager.getFilterSearchQuery();
+        currentFilterState.minAmount = preferencesManager.getFilterMinAmount();
+        currentFilterState.maxAmount = preferencesManager.getFilterMaxAmount();
+        currentFilterState.showingExcluded = preferencesManager.getFilterShowExcluded();
+        currentFilterState.recurringOnly = preferencesManager.getFilterRecurringOnly();
+
+        // Update UI if filters are active
+        if (preferencesManager.hasActiveFilters()) {
+            // Update filter indicator
+            updateFilterIndicatorUI();
+            
+            // Apply filters to SmartLoadingStrategy
+            if (smartLoadingStrategy != null) {
+                smartLoadingStrategy.updateFilterState(currentFilterState);
+            }
+        }
+    }
+
+    private void saveCurrentFilterState() {
+        // Save current filter state to preferences
+        preferencesManager.saveFilterState(
+            currentFilterState.bank,
+            currentFilterState.type,
+            currentFilterState.category,
+            currentFilterState.searchQuery,
+            currentFilterState.minAmount,
+            currentFilterState.maxAmount,
+            currentFilterState.showingExcluded,
+            currentFilterState.recurringOnly
+        );
+    }
+
+    private void updateFilterIndicatorUI() {
+        if (filterIndicatorContainer != null && filterIndicator != null) {
+            if (preferencesManager.hasActiveFilters()) {
+                filterIndicatorContainer.setVisibility(View.VISIBLE);
+                
+                StringBuilder desc = new StringBuilder("Filtered by: ");
+                boolean hasFilter = false;
+
+                if (!currentFilterState.bank.equals("All Banks")) {
+                    desc.append(currentFilterState.bank);
+                    hasFilter = true;
+                }
+
+                if (!currentFilterState.type.equals("All Types")) {
+                    if (hasFilter) desc.append(", ");
+                    desc.append(currentFilterState.type);
+                    hasFilter = true;
+                }
+
+                if (!currentFilterState.category.isEmpty()) {
+                    if (hasFilter) desc.append(", ");
+                    desc.append(currentFilterState.category);
+                    hasFilter = true;
+                }
+
+                if (!currentFilterState.searchQuery.isEmpty()) {
+                    if (hasFilter) desc.append(", ");
+                    desc.append("Search: ").append(currentFilterState.searchQuery);
+                    hasFilter = true;
+                }
+
+                if (currentFilterState.minAmount > 0 || currentFilterState.maxAmount < 100000) {
+                    if (hasFilter) desc.append(", ");
+                    desc.append("Amount");
+                    hasFilter = true;
+                }
+
+                if (currentFilterState.showingExcluded) {
+                    if (hasFilter) desc.append(", ");
+                    desc.append("Including Excluded");
+                    hasFilter = true;
+                }
+
+                filterIndicator.setText(desc.toString());
+            } else {
+                filterIndicatorContainer.setVisibility(View.GONE);
+            }
+        }
     }
 }

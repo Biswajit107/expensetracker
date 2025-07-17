@@ -22,8 +22,6 @@ import java.util.concurrent.Executors;
 public class AnalyticsViewModel extends AndroidViewModel {
     private final TransactionRepository repository;
     private final ExecutorService executorService;
-    private final MutableLiveData<Long> selectedStartDate = new MutableLiveData<>();
-    private final MutableLiveData<Long> selectedEndDate = new MutableLiveData<>();
 
     public AnalyticsViewModel(Application application) {
         super(application);
@@ -32,23 +30,38 @@ public class AnalyticsViewModel extends AndroidViewModel {
     }
 
     public LiveData<MonthlyData> getMonthlyData(long startDate, long endDate) {
-        selectedStartDate.setValue(startDate);
-        selectedEndDate.setValue(endDate);
+        // FIXED: Use simple MutableLiveData to avoid infinite loop from nested switchMap
+        MutableLiveData<MonthlyData> result = new MutableLiveData<>();
 
-        return Transformations.switchMap(selectedStartDate, start ->
-                Transformations.switchMap(selectedEndDate, end -> {
-                    MutableLiveData<MonthlyData> result = new MutableLiveData<>();
+        executorService.execute(() -> {
+            android.util.Log.d("AnalyticsViewModel", "=== ANALYTICS DATA RETRIEVAL START ===");
+            android.util.Log.d("AnalyticsViewModel", "Fetching transactions from " + 
+                new java.util.Date(startDate) + " to " + new java.util.Date(endDate));
+            android.util.Log.d("AnalyticsViewModel", "Date range in millis: " + startDate + " to " + endDate);
+            
+            List<Transaction> transactions = null;
+            try {
+                transactions = repository.getTransactionsBetweenDatesSync(startDate, endDate);
+                android.util.Log.d("AnalyticsViewModel", "Repository returned: " + 
+                    (transactions != null ? transactions.size() : "NULL") + " transactions");
+                
+                if (transactions != null && !transactions.isEmpty()) {
+                    android.util.Log.d("AnalyticsViewModel", "First transaction: Amount=" + 
+                        transactions.get(0).getAmount() + ", Date=" + new java.util.Date(transactions.get(0).getDate()) + 
+                        ", Type=" + transactions.get(0).getType() + ", Excluded=" + transactions.get(0).isExcludedFromTotal());
+                }
+            } catch (Exception e) {
+                android.util.Log.e("AnalyticsViewModel", "Error fetching transactions: " + e.getMessage(), e);
+            }
 
-                    executorService.execute(() -> {
-                        List<Transaction> transactions = repository
-                                .getTransactionsBetweenDatesSync(start, end);
+            MonthlyData monthlyData = calculateMonthlyData(transactions);
+            android.util.Log.d("AnalyticsViewModel", "MonthlyData created - Income: " + monthlyData.getTotalIncome() + 
+                ", Expenses: " + monthlyData.getTotalExpenses());
+            result.postValue(monthlyData);
+            android.util.Log.d("AnalyticsViewModel", "=== ANALYTICS DATA RETRIEVAL END ===");
+        });
 
-                        MonthlyData monthlyData = calculateMonthlyData(transactions);
-                        result.postValue(monthlyData);
-                    });
-
-                    return result;
-                }));
+        return result;
     }
 
     public LiveData<List<CategoryData>> getCategoryData(long startDate, long endDate) {
@@ -114,6 +127,18 @@ public class AnalyticsViewModel extends AndroidViewModel {
         return result;
     }
 
+    public LiveData<List<Transaction>> getTransactions(long startDate, long endDate) {
+        MutableLiveData<List<Transaction>> result = new MutableLiveData<>();
+        
+        executorService.execute(() -> {
+            List<Transaction> transactions = repository
+                    .getTransactionsBetweenDatesSync(startDate, endDate);
+            result.postValue(transactions);
+        });
+        
+        return result;
+    }
+
     private MonthlyData calculateMonthlyData(List<Transaction> transactions) {
         Map<Date, Double> dailyTransactions = new TreeMap<>();
         Map<String, Double> categoryTotals = new HashMap<>();
@@ -121,13 +146,41 @@ public class AnalyticsViewModel extends AndroidViewModel {
         double totalIncome = 0;
         double totalExpenses = 0;
 
+        // Debug logging
+        android.util.Log.d("AnalyticsViewModel", "=== CALCULATE MONTHLY DATA START ===");
+        android.util.Log.d("AnalyticsViewModel", "calculateMonthlyData called with " + 
+            (transactions != null ? transactions.size() : "null") + " transactions");
+
+        if (transactions == null) {
+            android.util.Log.e("AnalyticsViewModel", "TRANSACTIONS IS NULL!");
+            return new MonthlyData(dailyTransactions, categoryTotals, weeklyTotals, totalIncome, totalExpenses);
+        }
+        
+        if (transactions.isEmpty()) {
+            android.util.Log.w("AnalyticsViewModel", "TRANSACTIONS LIST IS EMPTY!");
+            return new MonthlyData(dailyTransactions, categoryTotals, weeklyTotals, totalIncome, totalExpenses);
+        }
+        
+        android.util.Log.d("AnalyticsViewModel", "Processing " + transactions.size() + " transactions...");
+
         // Initialize data structures
         Calendar cal = Calendar.getInstance();
-        cal.setTimeInMillis(selectedStartDate.getValue());
 
+        // FIXED: Use same exclusion logic as MainActivity (excludes transactions marked as excluded)
+        boolean includeExcludedTransactions = false; // Match MainActivity logic: !transaction.isExcludedFromTotal()
+        
         // Calculate daily and category totals
+        int processedCount = 0;
+        int excludedCount = 0;
         for (Transaction transaction : transactions) {
-            if (!transaction.isExcludedFromTotal()) {
+            // Modified condition to optionally include excluded transactions
+            boolean shouldInclude = includeExcludedTransactions || !transaction.isExcludedFromTotal();
+            
+            if (shouldInclude) {
+                if (transaction.isExcludedFromTotal()) {
+                    android.util.Log.d("AnalyticsViewModel", "Including EXCLUDED transaction: " + transaction.getAmount());
+                }
+                processedCount++;
                 Date date = new Date(transaction.getDate());
 
                 if (transaction.isDebit()) {
@@ -135,15 +188,30 @@ public class AnalyticsViewModel extends AndroidViewModel {
                     categoryTotals.merge(transaction.getCategory(),
                             transaction.getAmount(), Double::sum);
                     totalExpenses += transaction.getAmount();
+                    android.util.Log.d("AnalyticsViewModel", "Added debit: " + transaction.getAmount() + 
+                        " Category: " + transaction.getCategory());
                 } else {
                     totalIncome += transaction.getAmount();
+                    android.util.Log.d("AnalyticsViewModel", "Added income: " + transaction.getAmount());
                 }
+            } else {
+                excludedCount++;
+                android.util.Log.d("AnalyticsViewModel", "EXCLUDED transaction: " + transaction.getAmount() + 
+                    " Reason: " + transaction.getExclusionSource() + 
+                    " IsOtherDebit: " + transaction.isOtherDebit() + 
+                    " Description: " + transaction.getDescription());
             }
+        }
+        
+        android.util.Log.d("AnalyticsViewModel", "Processed " + processedCount + " transactions, excluded " + 
+            excludedCount + ". Total Income: " + totalIncome + ", Total Expenses: " + totalExpenses);
+        
+        if (excludedCount > 0 && processedCount == 0) {
+            android.util.Log.w("AnalyticsViewModel", "ALL TRANSACTIONS ARE EXCLUDED! This is why analytics shows zero.");
         }
 
         // Calculate weekly totals
         Calendar weekCal = Calendar.getInstance();
-        weekCal.setTimeInMillis(selectedStartDate.getValue());
         double weekTotal = 0;
 
         for (Map.Entry<Date, Double> entry : dailyTransactions.entrySet()) {
@@ -161,6 +229,10 @@ public class AnalyticsViewModel extends AndroidViewModel {
             weeklyTotals.add(weekTotal);
         }
 
+        android.util.Log.d("AnalyticsViewModel", "=== CALCULATE MONTHLY DATA END ===");
+        android.util.Log.d("AnalyticsViewModel", "FINAL RESULT - Income: " + totalIncome + ", Expenses: " + totalExpenses);
+        android.util.Log.d("AnalyticsViewModel", "Daily transactions: " + dailyTransactions.size() + ", Category totals: " + categoryTotals.size());
+        
         return new MonthlyData(dailyTransactions, categoryTotals,
                 weeklyTotals, totalIncome, totalExpenses);
     }
@@ -174,6 +246,11 @@ public class AnalyticsViewModel extends AndroidViewModel {
         budgets.put("Transport", 2000.0);
         budgets.put("Bills", 15000.0);
         return budgets;
+    }
+
+    // Public method for debugging - direct database access
+    public List<Transaction> getTransactionsBetweenDatesSyncForDebug(long startDate, long endDate) {
+        return repository.getTransactionsBetweenDatesSync(startDate, endDate);
     }
 
     @Override

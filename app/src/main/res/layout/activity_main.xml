@@ -104,7 +104,56 @@
                 android:layout_width="match_parent"
                 android:layout_height="?attr/actionBarSize"
                 android:elevation="0dp"
-                app:layout_collapseMode="pin"/>
+                app:layout_collapseMode="pin">
+
+                <!-- Collapsed Mini Summary (visible when toolbar is collapsed) -->
+                <LinearLayout
+                    android:id="@+id/collapsedSummaryLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="16dp"
+                    android:alpha="0.0">
+
+                    <!-- Balance -->
+                    <TextView
+                        android:id="@+id/collapsedBalanceText"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textColor="@color/white"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:text="₹0.00"
+                        android:gravity="start"/>
+
+                    <!-- Income (with up arrow) -->
+                    <TextView
+                        android:id="@+id/collapsedIncomeText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:text="↑₹0"
+                        android:layout_marginEnd="12dp"
+                        android:background="@drawable/mini_summary_income_bg"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="2dp"/>
+
+                    <!-- Expenses (with down arrow) -->
+                    <TextView
+                        android:id="@+id/collapsedExpensesText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:text="↓₹0"
+                        android:background="@drawable/mini_summary_expense_bg"
+                        android:paddingHorizontal="8dp"
+                        android:paddingVertical="2dp"/>
+                </LinearLayout>
+            </com.google.android.material.appbar.MaterialToolbar>
         </com.google.android.material.appbar.CollapsingToolbarLayout>
 
         <!-- Date Range Selector Bar (stays visible while scrolling) -->
@@ -488,7 +537,7 @@
                                 android:layout_height="48dp"
                                 android:layout_weight="1"
                                 android:background="@null"
-                                android:hint="Search"
+                                android:hint="Search transactions or amounts"
                                 android:inputType="text"
                                 android:singleLine="true"
                                 android:imeOptions="actionSearch"

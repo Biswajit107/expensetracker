@@ -46,13 +46,15 @@
         <item name="cornerSize">16dp</item>
     </style>
 
-<!--    &lt;!&ndash; Custom Styles &ndash;&gt;-->
-<!--    <style name="Widget.App.CardView" parent="Widget.MaterialComponents.CardView">-->
-<!--        <item name="cardElevation">2dp</item>-->
-<!--        <item name="cardCornerRadius">16dp</item>-->
-<!--        <item name="android:layout_marginHorizontal">16dp</item>-->
-<!--        <item name="android:layout_marginVertical">8dp</item>-->
-<!--    </style>-->
+    <!-- Custom Styles -->
+    <style name="Widget.App.CardView" parent="Widget.MaterialComponents.CardView">
+        <item name="cardElevation">2dp</item>
+        <item name="cardCornerRadius">16dp</item>
+        <item name="android:layout_marginLeft">16dp</item>
+        <item name="android:layout_marginRight">16dp</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginBottom">8dp</item>
+    </style>
 
     <style name="TextAppearance.App.Headline1" parent="TextAppearance.MaterialComponents.Headline1">
         <item name="android:textSize">32sp</item>

@@ -120,6 +120,7 @@ public class SmartLoadingStrategy {
         filterState.showingExcluded = mainFilterState.showingExcluded;
         filterState.sortOption = mainFilterState.sortOption;
         filterState.viewingManuallyExcluded = mainFilterState.viewingManuallyExcluded;
+        filterState.recurringOnly = mainFilterState.recurringOnly;
         
         
         return filterState;
@@ -158,21 +159,16 @@ public class SmartLoadingStrategy {
     public void setupSwipeToExclude(Context context, SwipeToExcludeCallback.SwipeActionListener listener) {
         if (recyclerView == null) return;
 
-        // Determine the action type based on current filter state
-        SwipeToExcludeCallback.SwipeActionType actionType = currentFilterState.viewingManuallyExcluded ? 
-                SwipeToExcludeCallback.SwipeActionType.DELETE : 
-                SwipeToExcludeCallback.SwipeActionType.EXCLUDE;
-                
 
         // Create the SwipeToExcludeCallback
         SwipeToExcludeCallback swipeCallback;
 
         if (isGroupedViewActive) {
             // For grouped view, create a special swipe handler for the nested RecyclerViews
-            setupGroupedSwipeToExclude(context, listener, actionType);
+            setupGroupedSwipeToExclude(context, listener);
         } else {
             // For regular list view, attach the swipe handler to the main RecyclerView
-            swipeCallback = new SwipeToExcludeCallback(context, transactionAdapter, listener, actionType);
+            swipeCallback = new SwipeToExcludeCallback(context, transactionAdapter, listener);
             ItemTouchHelper itemTouchHelper = new ItemTouchHelper(swipeCallback);
             itemTouchHelper.attachToRecyclerView(recyclerView);
         }
@@ -182,7 +178,7 @@ public class SmartLoadingStrategy {
      * Special handling for setting up swipe in grouped view
      * We need to find all nested RecyclerViews and attach the swipe handler to each
      */
-    private void setupGroupedSwipeToExclude(Context context, SwipeToExcludeCallback.SwipeActionListener listener, SwipeToExcludeCallback.SwipeActionType actionType) {
+    private void setupGroupedSwipeToExclude(Context context, SwipeToExcludeCallback.SwipeActionListener listener) {
         if (recyclerView == null || groupedAdapter == null) return;
 
         // We need to find the nested RecyclerViews inside each group
@@ -195,12 +191,11 @@ public class SmartLoadingStrategy {
                     // Get the adapter
                     RecyclerView.Adapter<?> nestedAdapter = nestedList.getAdapter();
                     if (nestedAdapter instanceof TransactionAdapter) {
-                        // Attach swipe handler to this nested list with the appropriate action type
+                        // Attach swipe handler to this nested list
                         SwipeToExcludeCallback swipeCallback = new SwipeToExcludeCallback(
                                 context,
                                 (TransactionAdapter) nestedAdapter,
-                                listener,
-                                actionType
+                                listener
                         );
                         ItemTouchHelper itemTouchHelper = new ItemTouchHelper(swipeCallback);
                         itemTouchHelper.attachToRecyclerView(nestedList);
@@ -373,10 +368,19 @@ public class SmartLoadingStrategy {
                 // Load all transactions for the date range
                 List<Transaction> transactions;
 
+                Log.d(TAG, "Loading transactions - showingExcluded: " + currentFilterState.showingExcluded + ", viewingManuallyExcluded: " + currentFilterState.viewingManuallyExcluded);
+
                 if (currentFilterState.viewingManuallyExcluded) {
                     transactions = dao.getManuallyExcludedTransactionsBetweenDatesSync(fromDate, toDate);
+                    Log.d(TAG, "Fetched manually excluded transactions: " + (transactions != null ? transactions.size() : 0));
+                } else if (currentFilterState.showingExcluded) {
+                    // When showing excluded transactions, fetch ALL transactions
+                    transactions = dao.getTransactionsBetweenDatesSync(fromDate, toDate);
+                    Log.d(TAG, "Fetched ALL transactions (including excluded): " + (transactions != null ? transactions.size() : 0));
                 } else {
+                    // When not showing excluded transactions, fetch only non-excluded ones
                     transactions = dao.getNonExcludedTransactionsBetweenDatesSync(fromDate, toDate);
+                    Log.d(TAG, "Fetched non-excluded transactions: " + (transactions != null ? transactions.size() : 0));
                 }
 
                 // Apply any additional filters if needed
@@ -428,11 +432,6 @@ public class SmartLoadingStrategy {
                                         public void onSwipeToExclude(Transaction transaction) {
                                             activity.excludeTransactionManually(transaction);
                                         }
-                                        
-                                        @Override
-                                        public void onSwipeToDelete(Transaction transaction) {
-                                            activity.deleteTransaction(transaction);
-                                        }
                                     });
                                 });
                             }
@@ -478,10 +477,19 @@ public class SmartLoadingStrategy {
                 // Get all transactions for the given date range, not just the first page
                 List<Transaction> transactions;
 
+                Log.d(TAG, "Loading paginated transactions - showingExcluded: " + currentFilterState.showingExcluded + ", viewingManuallyExcluded: " + currentFilterState.viewingManuallyExcluded);
+
                 if (currentFilterState.viewingManuallyExcluded) {
                     transactions = dao.getManuallyExcludedTransactionsBetweenDatesSync(fromDate, toDate);
+                    Log.d(TAG, "Fetched manually excluded transactions: " + (transactions != null ? transactions.size() : 0));
+                } else if (currentFilterState.showingExcluded) {
+                    // When showing excluded transactions, fetch ALL transactions
+                    transactions = dao.getTransactionsBetweenDatesSync(fromDate, toDate);
+                    Log.d(TAG, "Fetched ALL transactions (including excluded): " + (transactions != null ? transactions.size() : 0));
                 } else {
+                    // When not showing excluded transactions, fetch only non-excluded ones
                     transactions = dao.getNonExcludedTransactionsBetweenDatesSync(fromDate, toDate);
+                    Log.d(TAG, "Fetched non-excluded transactions: " + (transactions != null ? transactions.size() : 0));
                 }
 
                 // Apply any additional filters if needed
@@ -524,11 +532,6 @@ public class SmartLoadingStrategy {
                                     @Override
                                     public void onSwipeToExclude(Transaction transaction) {
                                         activity.excludeTransactionManually(transaction);
-                                    }
-                                    
-                                    @Override
-                                    public void onSwipeToDelete(Transaction transaction) {
-                                        activity.deleteTransaction(transaction);
                                     }
                                 });
                             }
@@ -679,11 +682,6 @@ public class SmartLoadingStrategy {
                         public void onSwipeToExclude(Transaction transaction) {
                             activity.excludeTransactionManually(transaction);
                         }
-                        
-                        @Override
-                        public void onSwipeToDelete(Transaction transaction) {
-                            activity.deleteTransaction(transaction);
-                        }
                     });
                 }
             });
@@ -728,47 +726,6 @@ public class SmartLoadingStrategy {
         }
     }
 
-    /**
-     * Delete a transaction from both adapters and database
-     */
-    public void deleteTransactionFromAdapters(Transaction transactionToDelete) {
-        executorService.execute(() -> {
-            // Delete from database
-            TransactionDao dao = TransactionDatabase.getInstance(context).transactionDao();
-            dao.deleteTransactionById(transactionToDelete.getId());
-
-            // Update UI on main thread
-            if (context instanceof android.app.Activity) {
-                ((android.app.Activity) context).runOnUiThread(() -> {
-                    // Remove from transaction adapter if it's being used
-                    if (!isGroupedViewActive) {
-                        List<Transaction> currentTransactions = transactionAdapter.getTransactions();
-                        for (int i = 0; i < currentTransactions.size(); i++) {
-                            Transaction transaction = currentTransactions.get(i);
-                            if (transaction.getId() == transactionToDelete.getId()) {
-                                currentTransactions.remove(i);
-                                transactionAdapter.notifyItemRemoved(i);
-                                break;
-                            }
-                        }
-                    } else {
-                        // For grouped adapter, reload the data
-                        if (currentFilterState.viewingManuallyExcluded) {
-                            loadGroupedTransactions(0, System.currentTimeMillis()); // Reload all
-                        } else {
-                            if (context instanceof MainActivity) {
-                                MainActivity activity = (MainActivity) context;
-                                loadGroupedTransactions(activity.getFromDate(), activity.getToDate());
-                            }
-                        }
-                    }
-
-                    // Show confirmation
-                    Toast.makeText(context, "Transaction deleted", Toast.LENGTH_SHORT).show();
-                });
-            }
-        });
-    }
 
     /**
      * Refresh the data completely (used after filtering)
@@ -825,6 +782,7 @@ public class SmartLoadingStrategy {
         public boolean showingExcluded = false;
         public int sortOption = 0; // 0 = Date (newest first)
         public boolean viewingManuallyExcluded = false;
+        public boolean recurringOnly = false;
 
         // Method to check if any filter is active
         public boolean isAnyFilterActive() {
@@ -834,7 +792,8 @@ public class SmartLoadingStrategy {
                     !searchQuery.isEmpty() ||
                     minAmount > 0 ||
                     maxAmount < 100000 ||
-                    showingExcluded;
+                    showingExcluded ||
+                    recurringOnly;
         }
 
         // Apply filters to a list of transactions
@@ -897,7 +856,36 @@ public class SmartLoadingStrategy {
                         matchesSearch = true;
                     }
 
+                    // Check amount (support both exact and partial matches)
+                    if (!matchesSearch) {
+                        String amountString = String.valueOf(transaction.getAmount());
+                        // Check if query matches amount (supports partial matches like "100" matching "1000")
+                        if (amountString.contains(query)) {
+                            matchesSearch = true;
+                            Log.d(TAG, "Amount search match found: " + query + " in " + amountString);
+                        }
+                        // Also check formatted amount (e.g., "₹1000" or "1000.00")
+                        if (!matchesSearch) {
+                            String formattedAmount = String.format("%.2f", transaction.getAmount());
+                            if (formattedAmount.contains(query)) {
+                                matchesSearch = true;
+                                Log.d(TAG, "Formatted amount search match found: " + query + " in " + formattedAmount);
+                            }
+                        }
+                    }
+
                     include = matchesSearch;
+                }
+
+                // Apply exclusion filter
+                if (include && !showingExcluded && transaction.isExcludedFromTotal()) {
+                    include = false;
+                    Log.d(TAG, "Filtering out excluded transaction: " + transaction.getDescription());
+                }
+
+                // Apply recurring filter
+                if (include && recurringOnly && !transaction.isRecurring()) {
+                    include = false;
                 }
 
                 if (include) {

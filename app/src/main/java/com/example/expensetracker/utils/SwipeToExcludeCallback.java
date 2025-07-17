@@ -29,12 +29,11 @@ public class SwipeToExcludeCallback extends ItemTouchHelper.SimpleCallback {
     private final SwipeActionType actionType;
 
     public enum SwipeActionType {
-        EXCLUDE, DELETE
+        EXCLUDE
     }
 
     public interface SwipeActionListener {
         void onSwipeToExclude(Transaction transaction);
-        void onSwipeToDelete(Transaction transaction);
     }
 
     public SwipeToExcludeCallback(Context context, TransactionAdapter adapter, SwipeActionListener listener) {
@@ -51,18 +50,10 @@ public class SwipeToExcludeCallback extends ItemTouchHelper.SimpleCallback {
         
         android.util.Log.d("SwipeToExcludeCallback", "Created SwipeToExcludeCallback with actionType: " + actionType);
 
-        // Set up styling based on action type
-        if (actionType == SwipeActionType.DELETE) {
-            // Red background and delete icon for delete action
-            background = new ColorDrawable(ContextCompat.getColor(context, R.color.red));
-            icon = ContextCompat.getDrawable(context, R.drawable.ic_remove);
-            swipeText = "Delete";
-        } else {
-            // Purple background and exclude icon for exclude action
-            background = new ColorDrawable(ContextCompat.getColor(context, R.color.purple_light));
-            icon = ContextCompat.getDrawable(context, R.drawable.ic_exclude);
-            swipeText = "Exclude";
-        }
+        // Set up styling for exclude action only
+        background = new ColorDrawable(ContextCompat.getColor(context, R.color.purple_light));
+        icon = ContextCompat.getDrawable(context, R.drawable.ic_exclude);
+        swipeText = "Exclude";
 
         // Margin for the icon
         iconMargin = context.getResources().getDimensionPixelSize(R.dimen.swipe_icon_margin);
@@ -97,13 +88,9 @@ public class SwipeToExcludeCallback extends ItemTouchHelper.SimpleCallback {
         // Get the transaction that was swiped
         Transaction transaction = adapter.getTransactions().get(position);
 
-        // Notify the listener based on action type
+        // Notify the listener for exclude action
         if (listener != null) {
-            if (actionType == SwipeActionType.DELETE) {
-                listener.onSwipeToDelete(transaction);
-            } else {
-                listener.onSwipeToExclude(transaction);
-            }
+            listener.onSwipeToExclude(transaction);
         }
     }
 

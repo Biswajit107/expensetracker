@@ -23,6 +23,16 @@ public class PreferencesManager {
 
     private static final String KEY_SELECTED_CHART_YEAR = "selected_chart_year";
     private static final String KEY_SELECTED_CHART_MONTH = "selected_chart_month";
+    
+    // Filter preferences
+    private static final String KEY_FILTER_BANK = "filter_bank";
+    private static final String KEY_FILTER_TYPE = "filter_type";
+    private static final String KEY_FILTER_CATEGORY = "filter_category";
+    private static final String KEY_FILTER_SEARCH_QUERY = "filter_search_query";
+    private static final String KEY_FILTER_MIN_AMOUNT = "filter_min_amount";
+    private static final String KEY_FILTER_MAX_AMOUNT = "filter_max_amount";
+    private static final String KEY_FILTER_SHOW_EXCLUDED = "filter_show_excluded";
+    private static final String KEY_FILTER_RECURRING_ONLY = "filter_recurring_only";
 
     private SharedPreferences prefs;
 
@@ -321,5 +331,76 @@ public class PreferencesManager {
      */
     public long getLastQuickEntryTime() {
         return getPreference("last_quick_entry_time", 0L);
+    }
+
+    // Filter state persistence methods
+    public void saveFilterState(String bank, String type, String category, String searchQuery, 
+                               double minAmount, double maxAmount, boolean showExcluded, boolean recurringOnly) {
+        prefs.edit()
+                .putString(KEY_FILTER_BANK, bank)
+                .putString(KEY_FILTER_TYPE, type)
+                .putString(KEY_FILTER_CATEGORY, category)
+                .putString(KEY_FILTER_SEARCH_QUERY, searchQuery)
+                .putFloat(KEY_FILTER_MIN_AMOUNT, (float) minAmount)
+                .putFloat(KEY_FILTER_MAX_AMOUNT, (float) maxAmount)
+                .putBoolean(KEY_FILTER_SHOW_EXCLUDED, showExcluded)
+                .putBoolean(KEY_FILTER_RECURRING_ONLY, recurringOnly)
+                .apply();
+    }
+
+    public String getFilterBank() {
+        return prefs.getString(KEY_FILTER_BANK, "All Banks");
+    }
+
+    public String getFilterType() {
+        return prefs.getString(KEY_FILTER_TYPE, "All Types");
+    }
+
+    public String getFilterCategory() {
+        return prefs.getString(KEY_FILTER_CATEGORY, "");
+    }
+
+    public String getFilterSearchQuery() {
+        return prefs.getString(KEY_FILTER_SEARCH_QUERY, "");
+    }
+
+    public double getFilterMinAmount() {
+        return prefs.getFloat(KEY_FILTER_MIN_AMOUNT, 0f);
+    }
+
+    public double getFilterMaxAmount() {
+        return prefs.getFloat(KEY_FILTER_MAX_AMOUNT, 100000f);
+    }
+
+    public boolean getFilterShowExcluded() {
+        return prefs.getBoolean(KEY_FILTER_SHOW_EXCLUDED, false);
+    }
+
+    public boolean getFilterRecurringOnly() {
+        return prefs.getBoolean(KEY_FILTER_RECURRING_ONLY, false);
+    }
+
+    public void clearFilterState() {
+        prefs.edit()
+                .remove(KEY_FILTER_BANK)
+                .remove(KEY_FILTER_TYPE)
+                .remove(KEY_FILTER_CATEGORY)
+                .remove(KEY_FILTER_SEARCH_QUERY)
+                .remove(KEY_FILTER_MIN_AMOUNT)
+                .remove(KEY_FILTER_MAX_AMOUNT)
+                .remove(KEY_FILTER_SHOW_EXCLUDED)
+                .remove(KEY_FILTER_RECURRING_ONLY)
+                .apply();
+    }
+
+    public boolean hasActiveFilters() {
+        return !getFilterBank().equals("All Banks") ||
+               !getFilterType().equals("All Types") ||
+               !getFilterCategory().isEmpty() ||
+               !getFilterSearchQuery().isEmpty() ||
+               getFilterMinAmount() > 0 ||
+               getFilterMaxAmount() < 100000 ||
+               getFilterShowExcluded() ||
+               getFilterRecurringOnly();
     }
 }

@@ -10,7 +10,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Base64;
+import android.util.Base64;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
@@ -50,7 +50,7 @@ public class TransactionDuplicateDetector {
             byte[] hashBytes = digest.digest(content.getBytes());
 
             // Convert to Base64 string
-            return Base64.getEncoder().encodeToString(hashBytes);
+            return Base64.encodeToString(hashBytes, Base64.DEFAULT);
 
         } catch (NoSuchAlgorithmException e) {
             Log.e(TAG, "Error generating fingerprint", e);
