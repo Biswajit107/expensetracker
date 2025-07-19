@@ -13,7 +13,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
 import com.example.expensetracker.models.Transaction;
 
 @Database(entities = {Transaction.class, ExclusionPattern.class, CustomCategory.class},
-        version = 6, exportSchema = false)
+        version = 7, exportSchema = false)
 public abstract class TransactionDatabase extends RoomDatabase {
     private static TransactionDatabase instance;
     public abstract TransactionDao transactionDao();
@@ -70,6 +70,14 @@ public abstract class TransactionDatabase extends RoomDatabase {
         }
     };
 
+    static final Migration MIGRATION_6_7 = new Migration(6, 7) {
+        @Override
+        public void migrate(SupportSQLiteDatabase database) {
+            // Add note column to transactions table
+            database.execSQL("ALTER TABLE transactions ADD COLUMN note TEXT");
+        }
+    };
+
     public static synchronized TransactionDatabase getInstance(Context context) {
         if (instance == null) {
             instance = Room.databaseBuilder(
@@ -77,7 +85,7 @@ public abstract class TransactionDatabase extends RoomDatabase {
                             TransactionDatabase.class,
                             "transaction_database"
                     )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6) // Add the new migration
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7) // Add the new migration
                     .fallbackToDestructiveMigration()
                     .build();
         }

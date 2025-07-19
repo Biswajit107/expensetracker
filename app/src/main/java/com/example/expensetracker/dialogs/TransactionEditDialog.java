@@ -41,6 +41,7 @@ public class TransactionEditDialog extends DialogFragment {
 
     // Input views
     private TextInputEditText descriptionInput;
+    private TextInputEditText noteInput;
     private AutoCompleteTextView categoryInput;
     private SwitchMaterial excludeSwitch;
     private LinearLayout patternOptionLayout;
@@ -74,6 +75,7 @@ public class TransactionEditDialog extends DialogFragment {
 
         // Initialize views
         descriptionInput = view.findViewById(R.id.descriptionInput);
+        noteInput = view.findViewById(R.id.noteInput);
         categoryInput = view.findViewById(R.id.categoryInput);
         excludeSwitch = view.findViewById(R.id.excludeSwitch);
         MaterialButton cancelButton = view.findViewById(R.id.cancelButton);
@@ -150,6 +152,7 @@ public class TransactionEditDialog extends DialogFragment {
 
             // Update other transaction fields
             transaction.setDescription(descriptionInput.getText().toString());
+            transaction.setNote(noteInput.getText().toString());
 
             // Store previous excluded state to detect changes
             boolean wasExcluded = transaction.isExcludedFromTotal();
@@ -284,6 +287,7 @@ public class TransactionEditDialog extends DialogFragment {
     private void populateTransactionData() {
         if (transaction != null) {
             descriptionInput.setText(transaction.getDescription());
+            noteInput.setText(transaction.getNote());
             categoryInput.setText(transaction.getCategory(), false);
             excludeSwitch.setChecked(transaction.isExcludedFromTotal());
 

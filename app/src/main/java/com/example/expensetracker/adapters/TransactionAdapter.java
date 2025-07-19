@@ -95,6 +95,8 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
         private TextView categoryIndicator;
         private TextView otherBankIndicator;
         private TextView excludedHintText;
+        private TextView noteText;
+        private TextView noteExpandToggle;
 
         public TransactionViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -108,6 +110,8 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
             // Add these new fields to the ViewHolder class
             otherBankIndicator = itemView.findViewById(R.id.otherBankIndicator);
             excludedHintText = itemView.findViewById(R.id.excludedHintText);
+            noteText = itemView.findViewById(R.id.noteText);
+            noteExpandToggle = itemView.findViewById(R.id.noteExpandToggle);
 
             // Set click listener
             itemView.setOnClickListener(v -> {
@@ -245,6 +249,42 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
             }
 
             amountText.setText(String.format(Locale.getDefault(), "₹%.2f", transaction.getAmount()));
+
+            // Handle note display
+            if (transaction.getNote() != null && !transaction.getNote().trim().isEmpty()) {
+                noteText.setVisibility(View.VISIBLE);
+                String noteContent = transaction.getNote().trim();
+                
+                // Check if note is long and needs expand/collapse functionality
+                if (noteContent.length() > 80) {
+                    // Show truncated note initially
+                    noteText.setText(noteContent.substring(0, 80) + "...");
+                    noteExpandToggle.setVisibility(View.VISIBLE);
+                    
+                    // Set up expand/collapse click listener
+                    final boolean[] isExpanded = {false};
+                    noteExpandToggle.setOnClickListener(v -> {
+                        if (isExpanded[0]) {
+                            noteText.setText(noteContent.substring(0, 80) + "...");
+                            noteExpandToggle.setText("Tap to expand");
+                            noteText.setMaxLines(2);
+                            isExpanded[0] = false;
+                        } else {
+                            noteText.setText(noteContent);
+                            noteExpandToggle.setText("Tap to collapse");
+                            noteText.setMaxLines(Integer.MAX_VALUE);
+                            isExpanded[0] = true;
+                        }
+                    });
+                } else {
+                    // Show full note if it's short
+                    noteText.setText(noteContent);
+                    noteExpandToggle.setVisibility(View.GONE);
+                }
+            } else {
+                noteText.setVisibility(View.GONE);
+                noteExpandToggle.setVisibility(View.GONE);
+            }
         }
 
         // Helper method to get category color

@@ -362,12 +362,22 @@ public class QuickEntryFragment extends BottomSheetDialogFragment {
         // Get current timestamp
         long timestamp = System.currentTimeMillis();
 
-        // Create a description if none provided
-        String description = "";
+        // Get the user input from description/notes field
+        String userInput = "";
         if (descriptionInput != null && descriptionInput.getText() != null) {
-            description = descriptionInput.getText().toString().trim();
+            userInput = descriptionInput.getText().toString().trim();
         }
-        if (description.isEmpty()) {
+        
+        // Create a description and note from the user input
+        String description;
+        String note = null;
+        
+        if (!userInput.isEmpty()) {
+            // If user provided input, use it as both description and note
+            description = userInput;
+            note = userInput;
+        } else {
+            // If no user input, use default description
             description = selectedCategory.getName() + " Expense";
         }
 
@@ -382,6 +392,11 @@ public class QuickEntryFragment extends BottomSheetDialogFragment {
 
         // Set the category
         transaction.setCategory(selectedCategory.getName());
+        
+        // Set the note if provided
+        if (note != null) {
+            transaction.setNote(note);
+        }
 
         // Save the transaction
         transactionViewModel.insert(transaction);

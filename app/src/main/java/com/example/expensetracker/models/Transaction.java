@@ -66,6 +66,9 @@ public class Transaction {
     @ColumnInfo(name = "exclusion_source")
     private String exclusionSource; // "MANUAL", "AUTO", "NONE"
 
+    @ColumnInfo(name = "note")
+    private String note; // User-added detailed notes about the transaction
+
     // Constructor
     public Transaction(String bank, String type, double amount, long date, String description) {
         this.bank = bank;
@@ -132,6 +135,9 @@ public class Transaction {
 
     public String getExclusionSource() { return exclusionSource; }
     public void setExclusionSource(String exclusionSource) { this.exclusionSource = exclusionSource; }
+
+    public String getNote() { return note; }
+    public void setNote(String note) { this.note = note; }
 
     // For category management
     public static class Categories {

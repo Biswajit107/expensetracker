@@ -28,6 +28,10 @@ public interface TransactionDao {
     @Query("UPDATE transactions SET is_excluded_from_total = :isExcluded WHERE id = :transactionId")
     void updateExcludedStatus(long transactionId, boolean isExcluded);
 
+    // New method to update a transaction's note
+    @Query("UPDATE transactions SET note = :note WHERE id = :transactionId")
+    void updateNote(long transactionId, String note);
+
     // New method to get a transaction by ID
     @Query("SELECT * FROM transactions WHERE id = :transactionId LIMIT 1")
     Transaction getTransactionById(long transactionId);
@@ -96,7 +100,8 @@ public interface TransactionDao {
             "merchant_name LIKE '%' || :query || '%' OR " +
             "category LIKE '%' || :query || '%' OR " +
             "bank LIKE '%' || :query || '%' OR " +
-            "original_sms LIKE '%' || :query || '%' " +
+            "original_sms LIKE '%' || :query || '%' OR " +
+            "note LIKE '%' || :query || '%' " +
             "ORDER BY date DESC")
     List<Transaction> searchTransactions(String query);
 

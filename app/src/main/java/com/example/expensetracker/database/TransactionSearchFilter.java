@@ -104,6 +104,9 @@ public class TransactionSearchFilter {
             queryBuilder.append(" OR original_sms LIKE ?");
             args.add("%" + searchText + "%");
 
+            queryBuilder.append(" OR note LIKE ?");
+            args.add("%" + searchText + "%");
+
             queryBuilder.append(")");
         }
 

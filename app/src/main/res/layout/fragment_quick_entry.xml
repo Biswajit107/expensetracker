@@ -211,14 +211,17 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                    android:hint="Add a note (e.g., lunch, groceries)">
+                    android:hint="Description &amp; Notes (Optional)">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/descriptionInput"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:inputType="text"
-                        android:maxLines="1"/>
+                        android:inputType="textMultiLine|textCapSentences"
+                        android:gravity="top"
+                        android:minLines="3"
+                        android:maxLines="6"
+                        android:scrollbars="vertical"/>
                 </com.google.android.material.textfield.TextInputLayout>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
