@@ -60,6 +60,7 @@
     <color name="info_text">#0D47A1</color> <!-- Dark blue text for contrast -->
     <color name="category_others">#607D8B</color>
     <color name="gray_light">#E0E0E0</color>
+    <color name="overlay_black_80">#CC000000</color>
 
     <!-- Chart colors -->
     <array name="chart_colors">

@@ -2,11 +2,14 @@ package com.example.expensetracker.ui;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
@@ -17,6 +20,8 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import android.content.DialogInterface;
@@ -28,6 +33,8 @@ import com.example.expensetracker.R;
 import com.example.expensetracker.adapters.CategoryTileAdapter;
 import com.example.expensetracker.models.Category;
 import com.example.expensetracker.models.Transaction;
+import com.example.expensetracker.ocr.CameraCaptureActivity;
+import com.example.expensetracker.ocr.OCRResultsActivity;
 import com.example.expensetracker.utils.PreferencesManager;
 import com.example.expensetracker.viewmodel.QuickEntryViewModel;
 import com.example.expensetracker.viewmodel.TransactionViewModel;
@@ -54,6 +61,7 @@ public class QuickEntryFragment extends BottomSheetDialogFragment {
     private MaterialButton decreaseButton;
     private ChipGroup amountChipGroup;
     private TextInputEditText descriptionInput;
+    private MaterialButton scanReceiptButton;
     private MaterialButton saveButton;
     private TextView addAnotherLink;
 
@@ -63,6 +71,10 @@ public class QuickEntryFragment extends BottomSheetDialogFragment {
 
     private PreferencesManager preferencesManager;
     private OnTransactionAddedListener transactionAddedListener;
+    
+    // OCR related constants
+    private static final int REQUEST_CAMERA_CAPTURE = 1001;
+    private static final int REQUEST_OCR_RESULTS = 1002;
 
     // Interface for callbacks to the activity
     public interface OnTransactionAddedListener {
@@ -80,7 +92,29 @@ public class QuickEntryFragment extends BottomSheetDialogFragment {
         }
     }
 
-    @Nullable
+    @NonNull
+    @Override
+    public Dialog onCreateDialog(Bundle savedInstanceState) {
+        BottomSheetDialog dialog = (BottomSheetDialog) super.onCreateDialog(savedInstanceState);
+        
+        dialog.setOnShowListener(dialogInterface -> {
+            BottomSheetDialog d = (BottomSheetDialog) dialogInterface;
+            View bottomSheetInternal = d.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+            if (bottomSheetInternal != null) {
+                BottomSheetBehavior<View> behavior = BottomSheetBehavior.from(bottomSheetInternal);
+                behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+                behavior.setSkipCollapsed(true);
+                behavior.setHideable(false); // Prevent dismissal by dragging
+                behavior.setDraggable(true); // Allow dragging for scrolling
+                
+                // Set peek height to match screen height to keep it expanded
+                behavior.setPeekHeight(getResources().getDisplayMetrics().heightPixels);
+            }
+        });
+        
+        return dialog;
+    }
+
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         return inflater.inflate(R.layout.fragment_quick_entry, container, false);
@@ -106,6 +140,9 @@ public class QuickEntryFragment extends BottomSheetDialogFragment {
         // Setup amount controls
         setupAmountControls();
 
+        // Setup OCR scan button
+        setupScanReceiptButton();
+
         // Setup save button
         setupSaveButton();
 
@@ -123,11 +160,54 @@ public class QuickEntryFragment extends BottomSheetDialogFragment {
         decreaseButton = view.findViewById(R.id.decreaseButton);
         amountChipGroup = view.findViewById(R.id.amountChipGroup);
         descriptionInput = view.findViewById(R.id.descriptionInput);
+        scanReceiptButton = view.findViewById(R.id.scanReceiptButton);
         saveButton = view.findViewById(R.id.saveButton);
         addAnotherLink = view.findViewById(R.id.addAnotherLink);
 
+        // Setup touch handling for description input to prevent scroll conflicts
+        setupTextInputTouchHandling();
+
         // Initialize amount display
         updateAmountDisplay();
+    }
+
+    private void setupTextInputTouchHandling() {
+        // Find the ScrollView in the layout
+        View rootView = getView();
+        if (rootView instanceof android.widget.ScrollView) {
+            android.widget.ScrollView scrollView = (android.widget.ScrollView) rootView;
+            
+            // Ensure proper nested scrolling
+            scrollView.setNestedScrollingEnabled(true);
+            scrollView.setOnTouchListener((v, event) -> {
+                if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                    clearFocusFromTextInputs();
+                }
+                return false;
+            });
+        }
+        
+        if (descriptionInput != null) {
+            // Allow text input to scroll internally when focused
+            descriptionInput.setOnTouchListener((v, event) -> {
+                v.getParent().requestDisallowInterceptTouchEvent(true);
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+                    v.getParent().requestDisallowInterceptTouchEvent(false);
+                }
+                return false;
+            });
+        }
+    }
+    
+    private void clearFocusFromTextInputs() {
+        if (descriptionInput != null && descriptionInput.hasFocus()) {
+            descriptionInput.clearFocus();
+            // Hide keyboard
+            InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.hideSoftInputFromWindow(descriptionInput.getWindowToken(), 0);
+            }
+        }
     }
 
     private void setupCategoryRecyclerView() {
@@ -325,6 +405,13 @@ public class QuickEntryFragment extends BottomSheetDialogFragment {
         input.setText(currentText + text);
     }
 
+    private void setupScanReceiptButton() {
+        scanReceiptButton.setOnClickListener(v -> {
+            Intent intent = new Intent(getActivity(), CameraCaptureActivity.class);
+            startActivityForResult(intent, REQUEST_CAMERA_CAPTURE);
+        });
+    }
+
     private void setupSaveButton() {
         saveButton.setOnClickListener(v -> {
             // Validate input
@@ -496,5 +583,47 @@ public class QuickEntryFragment extends BottomSheetDialogFragment {
         categories.add(new Category("Add New", R.drawable.ic_add, R.color.category_others, true));
 
         return categories;
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        
+        if (resultCode == Activity.RESULT_OK && data != null) {
+            switch (requestCode) {
+                case REQUEST_CAMERA_CAPTURE:
+                    // Image captured, now process with OCR
+                    String imageUri = data.getStringExtra(CameraCaptureActivity.EXTRA_IMAGE_URI);
+                    if (imageUri != null) {
+                        Intent ocrIntent = new Intent(getActivity(), OCRResultsActivity.class);
+                        ocrIntent.putExtra(OCRResultsActivity.EXTRA_IMAGE_URI, imageUri);
+                        startActivityForResult(ocrIntent, REQUEST_OCR_RESULTS);
+                    }
+                    break;
+                    
+                case REQUEST_OCR_RESULTS:
+                    // OCR completed, get extracted text
+                    String extractedText = data.getStringExtra(OCRResultsActivity.EXTRA_EXTRACTED_TEXT);
+                    boolean appendMode = data.getBooleanExtra(OCRResultsActivity.EXTRA_APPEND_MODE, false);
+                    
+                    if (extractedText != null && !extractedText.trim().isEmpty()) {
+                        String currentText = descriptionInput.getText().toString();
+                        
+                        if (appendMode && !currentText.trim().isEmpty()) {
+                            // Append to existing text
+                            descriptionInput.setText(currentText + "\n\n" + extractedText);
+                        } else {
+                            // Replace existing text
+                            descriptionInput.setText(extractedText);
+                        }
+                        
+                        // Clear focus from text input to allow page scrolling
+                        clearFocusFromTextInputs();
+                        
+                        Toast.makeText(requireContext(), "Receipt text added successfully!", Toast.LENGTH_SHORT).show();
+                    }
+                    break;
+            }
+        }
     }
 }

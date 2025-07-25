@@ -1,9 +1,13 @@
 package com.example.expensetracker.dialogs;
 
 import android.app.Dialog;
+import android.content.Intent;
 import android.os.Bundle;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
+import android.content.Context;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
@@ -22,6 +26,8 @@ import androidx.lifecycle.ViewModelProvider;
 import com.example.expensetracker.R;
 import com.example.expensetracker.models.CustomCategory;
 import com.example.expensetracker.models.Transaction;
+import com.example.expensetracker.ocr.CameraCaptureActivity;
+import com.example.expensetracker.ocr.OCRResultsActivity;
 import com.example.expensetracker.viewmodel.CategoryViewModel;
 import com.example.expensetracker.viewmodel.ExclusionPatternViewModel;
 import com.google.android.material.button.MaterialButton;
@@ -42,6 +48,7 @@ public class TransactionEditDialog extends DialogFragment {
     // Input views
     private TextInputEditText descriptionInput;
     private TextInputEditText noteInput;
+    private MaterialButton scanReceiptButton;
     private AutoCompleteTextView categoryInput;
     private SwitchMaterial excludeSwitch;
     private LinearLayout patternOptionLayout;
@@ -51,6 +58,10 @@ public class TransactionEditDialog extends DialogFragment {
     private LinearLayout customCategoryLayout;
     private EditText customCategoryInput;
     private String selectedColor = "#4CAF50"; // Default color
+    
+    // OCR related constants
+    private static final int REQUEST_CAMERA_CAPTURE = 1001;
+    private static final int REQUEST_OCR_RESULTS = 1002;
 
     public interface OnTransactionEditListener {
         void onTransactionEdited(Transaction transaction);
@@ -76,10 +87,23 @@ public class TransactionEditDialog extends DialogFragment {
         // Initialize views
         descriptionInput = view.findViewById(R.id.descriptionInput);
         noteInput = view.findViewById(R.id.noteInput);
+        scanReceiptButton = view.findViewById(R.id.scanReceiptButton);
         categoryInput = view.findViewById(R.id.categoryInput);
         excludeSwitch = view.findViewById(R.id.excludeSwitch);
+
         MaterialButton cancelButton = view.findViewById(R.id.cancelButton);
         MaterialButton saveButton = view.findViewById(R.id.saveButton);
+
+        // Setup touch handling for text inputs to prevent scroll conflicts
+        setupTextInputTouchHandling();
+        
+        // Setup dialog root view touch handling
+        view.setOnTouchListener((v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                clearFocusFromTextInputs();
+            }
+            return false;
+        });
 
         // NEW: Add pattern option layout and switch
         patternOptionLayout = view.findViewById(R.id.patternOptionLayout);
@@ -123,6 +147,9 @@ public class TransactionEditDialog extends DialogFragment {
 
         // Setup color selection
         setupColorSelection(colorSelectionContainer);
+        
+        // Setup scan receipt button
+        setupScanReceiptButton();
 
         // Populate data
         populateTransactionData();
@@ -204,6 +231,52 @@ public class TransactionEditDialog extends DialogFragment {
     }
 
     // New method to set up category dropdown with custom categories
+    private void setupTextInputTouchHandling() {
+        // Only set up touch handling for the text inputs, skip dialog root view setup
+        // since getDialog() might be null at this point
+        
+        if (noteInput != null) {
+            // Allow text input to scroll internally when focused
+            noteInput.setOnTouchListener((v, event) -> {
+                v.getParent().requestDisallowInterceptTouchEvent(true);
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+                    v.getParent().requestDisallowInterceptTouchEvent(false);
+                }
+                return false;
+            });
+        }
+        
+        if (descriptionInput != null) {
+            // Also handle description input
+            descriptionInput.setOnTouchListener((v, event) -> {
+                v.getParent().requestDisallowInterceptTouchEvent(true);
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+                    v.getParent().requestDisallowInterceptTouchEvent(false);
+                }
+                return false;
+            });
+        }
+    }
+    
+    private void clearFocusFromTextInputs() {
+        if (noteInput != null && noteInput.hasFocus()) {
+            noteInput.clearFocus();
+            // Hide keyboard
+            InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.hideSoftInputFromWindow(noteInput.getWindowToken(), 0);
+            }
+        }
+        if (descriptionInput != null && descriptionInput.hasFocus()) {
+            descriptionInput.clearFocus();
+            // Hide keyboard
+            InputMethodManager imm = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.hideSoftInputFromWindow(descriptionInput.getWindowToken(), 0);
+            }
+        }
+    }
+
     private void setupCategoryDropdownWithCustom() {
         // Get predefined categories
         List<String> categories = new ArrayList<>(Arrays.asList(Transaction.Categories.getAllCategories()));
@@ -284,6 +357,13 @@ public class TransactionEditDialog extends DialogFragment {
         }
     }
 
+    private void setupScanReceiptButton() {
+        scanReceiptButton.setOnClickListener(v -> {
+            Intent intent = new Intent(getActivity(), CameraCaptureActivity.class);
+            startActivityForResult(intent, REQUEST_CAMERA_CAPTURE);
+        });
+    }
+
     private void populateTransactionData() {
         if (transaction != null) {
             descriptionInput.setText(transaction.getDescription());
@@ -344,5 +424,47 @@ public class TransactionEditDialog extends DialogFragment {
                         Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        
+        if (resultCode == getActivity().RESULT_OK && data != null) {
+            switch (requestCode) {
+                case REQUEST_CAMERA_CAPTURE:
+                    // Image captured, now process with OCR
+                    String imageUri = data.getStringExtra(CameraCaptureActivity.EXTRA_IMAGE_URI);
+                    if (imageUri != null) {
+                        Intent ocrIntent = new Intent(getActivity(), OCRResultsActivity.class);
+                        ocrIntent.putExtra(OCRResultsActivity.EXTRA_IMAGE_URI, imageUri);
+                        startActivityForResult(ocrIntent, REQUEST_OCR_RESULTS);
+                    }
+                    break;
+                    
+                case REQUEST_OCR_RESULTS:
+                    // OCR completed, get extracted text
+                    String extractedText = data.getStringExtra(OCRResultsActivity.EXTRA_EXTRACTED_TEXT);
+                    boolean appendMode = data.getBooleanExtra(OCRResultsActivity.EXTRA_APPEND_MODE, false);
+                    
+                    if (extractedText != null && !extractedText.trim().isEmpty()) {
+                        String currentText = noteInput.getText().toString();
+                        
+                        if (appendMode && !currentText.trim().isEmpty()) {
+                            // Append to existing text
+                            noteInput.setText(currentText + "\n\n" + extractedText);
+                        } else {
+                            // Replace existing text
+                            noteInput.setText(extractedText);
+                        }
+                        
+                        // Clear focus from text input to allow dialog scrolling
+                        clearFocusFromTextInputs();
+                        
+                        android.widget.Toast.makeText(requireContext(), "Receipt text added successfully!", android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                    break;
+            }
+        }
     }
 }

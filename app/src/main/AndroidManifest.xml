@@ -4,6 +4,10 @@
 
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
     <application
         android:allowBackup="true"
@@ -39,6 +43,25 @@
         <activity
             android:launchMode="singleTask"
             android:name=".ExclusionPatternsActivity" />
+
+        <activity
+            android:name=".ocr.CameraCaptureActivity"
+            android:theme="@style/Theme.ExpenseTracker.FullScreen"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".ocr.OCRResultsActivity"
+            android:theme="@style/Theme.ExpenseTracker" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <activity
             android:name=".widget.BudgetCompactBlueWidgetConfigActivity"
             android:exported="true">

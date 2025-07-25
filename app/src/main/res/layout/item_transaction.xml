@@ -29,20 +29,34 @@
             android:orientation="vertical"
             android:padding="12dp">
 
-            <!-- Header row: Date and Bank -->
+            <!-- Header row: Date, Time and Bank -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:layout_marginBottom="4dp">
 
-                <TextView
-                    android:id="@+id/dateText"
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:textColor="#616161"
-                    android:textSize="13sp"/>
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/dateText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#616161"
+                        android:textSize="13sp"/>
+
+                    <TextView
+                        android:id="@+id/timeText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#757575"
+                        android:textSize="11sp"
+                        android:layout_marginTop="1dp"/>
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/bankText"

@@ -88,6 +88,7 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
 
     public class TransactionViewHolder extends RecyclerView.ViewHolder {
         private TextView dateText;
+        private TextView timeText;
         private TextView bankText;
         private Chip typeChip;
         private TextView amountText;
@@ -101,6 +102,7 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
         public TransactionViewHolder(@NonNull View itemView) {
             super(itemView);
             dateText = itemView.findViewById(R.id.dateText);
+            timeText = itemView.findViewById(R.id.timeText);
             bankText = itemView.findViewById(R.id.bankText);
             typeChip = itemView.findViewById(R.id.typeChip);
             amountText = itemView.findViewById(R.id.amountText);
@@ -136,7 +138,12 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
 
         void bind(Transaction transaction) {
             SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
-            dateText.setText(dateFormat.format(new Date(transaction.getDate())));
+            SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
+            
+            Date transactionDate = new Date(transaction.getDate());
+            dateText.setText(dateFormat.format(transactionDate));
+            timeText.setText(timeFormat.format(transactionDate));
+            
             bankText.setText(transaction.getBank());
 
             typeChip.setText(transaction.getType());

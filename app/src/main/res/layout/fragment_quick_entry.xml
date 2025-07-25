@@ -3,7 +3,11 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background">
+    android:background="@color/background"
+    android:overScrollMode="never"
+    android:scrollbars="vertical"
+    android:nestedScrollingEnabled="true"
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -207,22 +211,47 @@
                     android:textColor="@color/text_primary"
                     android:layout_marginBottom="8dp"/>
 
-                <com.google.android.material.textfield.TextInputLayout
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                    android:hint="Description &amp; Notes (Optional)">
+                    android:orientation="horizontal"
+                    android:gravity="top">
 
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/descriptionInput"
-                        android:layout_width="match_parent"
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:inputType="textMultiLine|textCapSentences"
-                        android:gravity="top"
-                        android:minLines="3"
-                        android:maxLines="6"
-                        android:scrollbars="vertical"/>
-                </com.google.android.material.textfield.TextInputLayout>
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        android:hint="Description &amp; Notes (Optional)">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/descriptionInput"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textMultiLine|textCapSentences"
+                            android:gravity="top"
+                            android:minLines="3"
+                            android:maxLines="6"
+                            android:scrollbars="none"
+                            android:overScrollMode="never"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/scanReceiptButton"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="📷 Scan\nReceipt"
+                        android:textSize="12sp"
+                        android:gravity="center"
+                        app:strokeColor="@color/primary"
+                        android:textColor="@color/primary"
+                        android:minWidth="80dp"
+                        android:padding="8dp" />
+
+                </LinearLayout>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
