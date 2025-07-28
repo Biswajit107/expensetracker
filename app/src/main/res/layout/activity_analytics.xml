@@ -348,30 +348,61 @@
                     android:orientation="vertical"
                     android:padding="20dp">
 
-                    <TextView
+                    <!-- Clickable Header -->
+                    <LinearLayout
+                        android:id="@+id/recurringExpensesHeader"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Recurring Expenses Detected"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/text_primary"
-                        android:layout_marginBottom="12dp" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:background="?android:attr/selectableItemBackground"
+                        android:padding="4dp"
+                        android:layout_marginBottom="12dp">
 
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/recurringExpensesRecyclerView"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:nestedScrollingEnabled="false" />
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Recurring Expenses Detected"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_primary" />
 
-                    <TextView
-                        android:id="@+id/totalRecurringText"
+                        <TextView
+                            android:id="@+id/recurringExpensesToggle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="▼"
+                            android:textSize="16sp"
+                            android:textColor="@color/text_secondary"
+                            android:layout_marginStart="8dp" />
+                    </LinearLayout>
+
+                    <!-- Collapsible Content -->
+                    <LinearLayout
+                        android:id="@+id/recurringExpensesContent"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Total recurring: ₹19,049/month"
-                        android:textSize="14sp"
-                        android:textColor="@color/text_primary"
-                        android:textStyle="bold"
-                        android:layout_marginTop="8dp" />
+                        android:orientation="vertical">
+
+                        <androidx.recyclerview.widget.RecyclerView
+                            android:id="@+id/recurringExpensesRecyclerView"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:nestedScrollingEnabled="false" />
+
+                        <TextView
+                            android:id="@+id/totalRecurringText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Total recurring: ₹19,049/month"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary"
+                            android:textStyle="bold"
+                            android:layout_marginTop="8dp" />
+                    </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -95,6 +96,10 @@ public class AnalyticsActivity extends AppCompatActivity {
     private TextView predictionStatusText;
     private TextView confidenceText;
     private RecyclerView recurringExpensesRecyclerView;
+    private LinearLayout recurringExpensesHeader;
+    private LinearLayout recurringExpensesContent;
+    private TextView recurringExpensesToggle;
+    private boolean isRecurringExpensesExpanded = true; // Default to expanded
     private TextView totalRecurringText;
     private TextView currentBurnRateText;
     private TextView burnRateChangeText;
@@ -181,6 +186,12 @@ public class AnalyticsActivity extends AppCompatActivity {
         predictionStatusText = findViewById(R.id.predictionStatusText);
         confidenceText = findViewById(R.id.confidenceText);
         recurringExpensesRecyclerView = findViewById(R.id.recurringExpensesRecyclerView);
+        recurringExpensesHeader = findViewById(R.id.recurringExpensesHeader);
+        recurringExpensesContent = findViewById(R.id.recurringExpensesContent);
+        recurringExpensesToggle = findViewById(R.id.recurringExpensesToggle);
+        
+        // Setup collapsible functionality
+        setupRecurringExpensesCollapse();
         totalRecurringText = findViewById(R.id.totalRecurringText);
         currentBurnRateText = findViewById(R.id.currentBurnRateText);
         burnRateChangeText = findViewById(R.id.burnRateChangeText);
@@ -223,6 +234,9 @@ public class AnalyticsActivity extends AppCompatActivity {
             recurringExpensesRecyclerView.setLayoutManager(new LinearLayoutManager(this));
             recurringExpensesRecyclerView.setAdapter(recurringExpensesAdapter);
         }
+        
+        // Initialize recurring expenses section state
+        updateRecurringExpensesCollapse();
         
         if (topMerchantsRecyclerView != null) {
             topMerchantsRecyclerView.setLayoutManager(new LinearLayoutManager(this));
@@ -569,8 +583,8 @@ public class AnalyticsActivity extends AppCompatActivity {
             }
         }
 
-        // Most frequent - placeholder for now (needs transaction detail data)
-        // mostFrequentText.setText("• Most frequent: Calculating..."); // TODO: Implement when transaction data available
+        // Most frequent merchant will be calculated when transaction data is available
+        // This is handled in updateTopMerchants method
 
         // Savings vs target (simplified - would need user's savings target)
         double savings = data.getTotalIncome() - data.getTotalExpenses();
@@ -620,29 +634,88 @@ public class AnalyticsActivity extends AppCompatActivity {
         Calendar monthStart = (Calendar) selectedMonth.clone();
         monthStart.set(Calendar.DAY_OF_MONTH, 1);
         
-        // Calculate days elapsed in month
-        long diffInMillis = now.getTimeInMillis() - monthStart.getTimeInMillis();
-        int daysElapsed = Math.max(1, (int) (diffInMillis / (1000 * 60 * 60 * 24)) + 1);
+        // Calculate days for current month vs past months
+        boolean isCurrentMonth = (selectedMonth.get(Calendar.YEAR) == now.get(Calendar.YEAR) && 
+                                 selectedMonth.get(Calendar.MONTH) == now.get(Calendar.MONTH));
+        
+        int daysToUse;
+        if (isCurrentMonth) {
+            // Current month - use days elapsed from start to now
+            long diffInMillis = now.getTimeInMillis() - monthStart.getTimeInMillis();
+            daysToUse = Math.max(1, (int) (diffInMillis / (1000 * 60 * 60 * 24)) + 1);
+        } else {
+            // Past month - use total days in that month
+            daysToUse = selectedMonth.getActualMaximum(Calendar.DAY_OF_MONTH);
+        }
         
         // Calculate daily average
-        double dailyAverage = data.getTotalExpenses() / daysElapsed;
+        double dailyAverage = data.getTotalExpenses() / daysToUse;
         
-        // Update daily average text (simplified previous month comparison)
+        // Update daily average text with dynamic last month comparison
         if (dailyAverageText != null) {
-            dailyAverageText.setText(String.format(Locale.getDefault(), 
-                "Daily avg: %s (vs ₹1,200 last month)", formatCurrency(dailyAverage)));
+            // Get last month's data for comparison
+            Calendar lastMonth = (Calendar) selectedMonth.clone();
+            lastMonth.add(Calendar.MONTH, -1);
+            
+            // Calculate date range for last month
+            Calendar lastMonthStart = (Calendar) lastMonth.clone();
+            lastMonthStart.set(Calendar.DAY_OF_MONTH, 1);
+            lastMonthStart.set(Calendar.HOUR_OF_DAY, 0);
+            lastMonthStart.set(Calendar.MINUTE, 0);
+            lastMonthStart.set(Calendar.SECOND, 0);
+            lastMonthStart.set(Calendar.MILLISECOND, 0);
+            
+            Calendar lastMonthEnd = (Calendar) lastMonth.clone();
+            lastMonthEnd.set(Calendar.DAY_OF_MONTH, lastMonth.getActualMaximum(Calendar.DAY_OF_MONTH));
+            lastMonthEnd.set(Calendar.HOUR_OF_DAY, 23);
+            lastMonthEnd.set(Calendar.MINUTE, 59);
+            lastMonthEnd.set(Calendar.SECOND, 59);
+            lastMonthEnd.set(Calendar.MILLISECOND, 999);
+            
+            viewModel.getMonthlyData(lastMonthStart.getTimeInMillis(), lastMonthEnd.getTimeInMillis()).observe(this, lastMonthData -> {
+                if (lastMonthData != null && lastMonthData.getTotalExpenses() > 0) {
+                    // Calculate last month's daily average
+                    int lastMonthDays = lastMonth.getActualMaximum(Calendar.DAY_OF_MONTH);
+                    double lastMonthDailyAvg = lastMonthData.getTotalExpenses() / lastMonthDays;
+                    
+                    Log.d("Analytics", "Daily avg: " + dailyAverage + ", Last month daily avg: " + lastMonthDailyAvg);
+                    
+                    if (lastMonthDailyAvg > 0) {
+                        dailyAverageText.setText(String.format(Locale.getDefault(), 
+                            "Daily avg: %s (vs %s last month)", 
+                            formatCurrency(dailyAverage), formatCurrency(lastMonthDailyAvg)));
+                    } else {
+                        dailyAverageText.setText(String.format(Locale.getDefault(), 
+                            "Daily avg: %s (vs ₹0 last month)", formatCurrency(dailyAverage)));
+                    }
+                } else {
+                    dailyAverageText.setText(String.format(Locale.getDefault(), 
+                        "Daily avg: %s (vs no data last month)", formatCurrency(dailyAverage)));
+                }
+            });
         }
 
-        // Update month progress
+        // Update month progress based on current month vs past month
         int totalDaysInMonth = selectedMonth.getActualMaximum(Calendar.DAY_OF_MONTH);
-        int progressPercentage = (daysElapsed * 100) / totalDaysInMonth;
+        int progressPercentage;
+        String currentDayText_Text;
+        
+        if (isCurrentMonth) {
+            // Current month - show actual progress
+            progressPercentage = (daysToUse * 100) / totalDaysInMonth;
+            currentDayText_Text = String.format(Locale.getDefault(), "You're here (Day %d)", daysToUse);
+        } else {
+            // Past month - show 100% complete
+            progressPercentage = 100;
+            currentDayText_Text = String.format(Locale.getDefault(), "Completed month (%d days)", totalDaysInMonth);
+        }
+        
         if (monthProgressBar != null) {
             monthProgressBar.setProgress(Math.min(100, progressPercentage));
         }
         
         if (currentDayText != null) {
-            currentDayText.setText(String.format(Locale.getDefault(), 
-                "You're here (Day %d)", daysElapsed));
+            currentDayText.setText(currentDayText_Text);
         }
     }
 
@@ -706,37 +779,53 @@ public class AnalyticsActivity extends AppCompatActivity {
     }
 
     private void updateBudgetProgress(List<AnalyticsViewModel.BudgetStatus> budgetData) {
-        double totalSpent = 0;
-        double totalBudget = 0;
+        // Don't rely on category data - get total spending from current monthly data
+        // This will be updated when we receive transaction data in updateDetailedAnalytics
+    }
+    
+    // New method to update budget progress with actual total spending
+    private void updateBudgetProgressWithTotalSpending(double totalSpent) {
+        // Use user-defined budget instead of dummy category budgets
+        double userBudget = preferencesManager.hasBudgetAmount() ? 
+            preferencesManager.getBudgetAmount(40000) : 40000;
 
-        for (AnalyticsViewModel.BudgetStatus status : budgetData) {
-            totalSpent += status.getSpent();
-            totalBudget += status.getBudget();
+        double percentage = userBudget > 0 ? (totalSpent / userBudget) * 100 : 0;
+
+        // Update progress bar (cap at 100% for visual purposes)
+        if (budgetProgressBar != null) {
+            budgetProgressBar.setProgress((int) Math.min(100, percentage));
         }
-
-        double percentage = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
-
-        // Update progress bar
-        budgetProgressBar.setProgress((int) percentage);
         
         // Update budget health text
         String healthStatus;
         if (percentage <= 70) {
             healthStatus = "Budget Health: Excellent";
-            budgetProgressBar.setIndicatorColor(getColor(R.color.green));
+            if (budgetProgressBar != null) {
+                budgetProgressBar.setIndicatorColor(getColor(R.color.green));
+            }
         } else if (percentage <= 85) {
             healthStatus = "Budget Health: Good";
-            budgetProgressBar.setIndicatorColor(getColor(R.color.yellow));
+            if (budgetProgressBar != null) {
+                budgetProgressBar.setIndicatorColor(getColor(R.color.yellow));
+            }
         } else if (percentage <= 100) {
             healthStatus = "Budget Health: Watch Out";
-            budgetProgressBar.setIndicatorColor(getColor(R.color.yellow_dark));
+            if (budgetProgressBar != null) {
+                budgetProgressBar.setIndicatorColor(getColor(R.color.yellow_dark));
+            }
         } else {
             healthStatus = "Budget Health: Over Budget";
-            budgetProgressBar.setIndicatorColor(getColor(R.color.red));
+            if (budgetProgressBar != null) {
+                budgetProgressBar.setIndicatorColor(getColor(R.color.red));
+            }
         }
         
-        budgetHealthText.setText(healthStatus);
-        budgetPercentageText.setText(String.format(Locale.getDefault(), "%.0f%% of budget used", percentage));
+        if (budgetHealthText != null) {
+            budgetHealthText.setText(healthStatus);
+        }
+        if (budgetPercentageText != null) {
+            budgetPercentageText.setText(String.format(Locale.getDefault(), "%.0f%% of budget used", percentage));
+        }
     }
 
     private void showMonthPicker() {
@@ -794,6 +883,17 @@ public class AnalyticsActivity extends AppCompatActivity {
             return;
         }
         
+        // Calculate total spent from all transactions
+        double totalSpent = 0;
+        for (Transaction t : transactions) {
+            if (t.isDebit() && !t.isExcludedFromTotal()) {
+                totalSpent += t.getAmount();
+            }
+        }
+        
+        // Update budget progress with actual total spending
+        updateBudgetProgressWithTotalSpending(totalSpent);
+        
         // Calculate dynamic analytics from actual transaction data
         updatePredictions(transactions);
         // updateRecurringExpenses(transactions); // Moved to updateRecurringExpensesWithHistory()
@@ -807,6 +907,42 @@ public class AnalyticsActivity extends AppCompatActivity {
     }
     
     private void updatePredictions(List<Transaction> transactions) {
+        // Check if we're viewing current month vs past month
+        Calendar now = Calendar.getInstance();
+        boolean isCurrentMonth = (selectedMonth.get(Calendar.YEAR) == now.get(Calendar.YEAR) && 
+                                 selectedMonth.get(Calendar.MONTH) == now.get(Calendar.MONTH));
+        
+        // Hide prediction views for past months
+        if (!isCurrentMonth) {
+            if (expectedTotalText != null) {
+                expectedTotalText.setVisibility(View.GONE);
+            }
+            if (budgetTargetText != null) {
+                budgetTargetText.setVisibility(View.GONE);
+            }
+            if (predictionStatusText != null) {
+                predictionStatusText.setVisibility(View.GONE);
+            }
+            if (confidenceText != null) {
+                confidenceText.setVisibility(View.GONE);
+            }
+            return;
+        }
+        
+        // Show prediction views for current month
+        if (expectedTotalText != null) {
+            expectedTotalText.setVisibility(View.VISIBLE);
+        }
+        if (budgetTargetText != null) {
+            budgetTargetText.setVisibility(View.VISIBLE);
+        }
+        if (predictionStatusText != null) {
+            predictionStatusText.setVisibility(View.VISIBLE);
+        }
+        if (confidenceText != null) {
+            confidenceText.setVisibility(View.VISIBLE);
+        }
+        
         double totalSpent = 0;
         for (Transaction t : transactions) {
             if (t.isDebit() && !t.isExcludedFromTotal()) {
@@ -814,7 +950,6 @@ public class AnalyticsActivity extends AppCompatActivity {
             }
         }
         
-        Calendar now = Calendar.getInstance();
         int dayOfMonth = now.get(Calendar.DAY_OF_MONTH);
         double dailyAverage = totalSpent / dayOfMonth;
         double expectedTotal = dailyAverage * 30;
@@ -831,7 +966,11 @@ public class AnalyticsActivity extends AppCompatActivity {
         }
         
         if (predictionStatusText != null) {
-            if (expectedTotal <= budget) {
+            // Check if budget is already exceeded
+            if (totalSpent >= budget) {
+                predictionStatusText.setText("Budget exceeded");
+                predictionStatusText.setTextColor(getColor(R.color.red));
+            } else if (expectedTotal <= budget) {
                 predictionStatusText.setText("Likely to stay under budget");
                 predictionStatusText.setTextColor(getColor(R.color.green));
             } else {
@@ -841,7 +980,20 @@ public class AnalyticsActivity extends AppCompatActivity {
         }
         
         if (confidenceText != null) {
-            int confidence = totalSpent > 1000 ? 85 : 60; // Higher confidence with more data
+            int confidence;
+            if (totalSpent >= budget) {
+                // Budget already exceeded - 100% confidence
+                confidence = 100;
+            } else if (dayOfMonth >= 20) {
+                // Late in month with good data
+                confidence = totalSpent > 1000 ? 85 : 75;
+            } else if (dayOfMonth >= 10) {
+                // Mid month
+                confidence = totalSpent > 500 ? 70 : 60;
+            } else {
+                // Early in month - lower confidence
+                confidence = totalSpent > 200 ? 50 : 30;
+            }
             confidenceText.setText("Confidence: " + confidence + "%");
         }
     }
@@ -984,44 +1136,65 @@ public class AnalyticsActivity extends AppCompatActivity {
         }
         
         // Step 2: Apply complex pattern analysis to predict upcoming transactions with lower confidence (85%+)
+        // Only show predictions for current month and future months, not past months
         
-        for (Map.Entry<String, List<Transaction>> entry : merchantGroups.entrySet()) {
-            String merchant = entry.getKey();
-            List<Transaction> merchantTransactions = entry.getValue();
-            
-            // Analyze patterns using complex logic
-            RecurringPattern pattern = analyzeRecurringPattern(merchant, merchantTransactions, selectedMonth);
-            
-            if (pattern.isRecurring && pattern.confidence >= 85 && pattern.shouldOccurThisMonth) {
-                // Check if we already have this transaction in occurred list
-                boolean alreadyOccurred = recurringExpenses.stream()
-                    .anyMatch(expense -> expense.description.toLowerCase().contains(merchant.toLowerCase()) && 
-                             expense.icon.equals("✅ Occurred"));
+        Calendar currentMonth = Calendar.getInstance();
+        currentMonth.set(Calendar.DAY_OF_MONTH, 1);
+        currentMonth.set(Calendar.HOUR_OF_DAY, 0);
+        currentMonth.set(Calendar.MINUTE, 0);
+        currentMonth.set(Calendar.SECOND, 0);
+        currentMonth.set(Calendar.MILLISECOND, 0);
+        
+        Calendar selectedMonthNormalized = (Calendar) selectedMonth.clone();
+        selectedMonthNormalized.set(Calendar.DAY_OF_MONTH, 1);
+        selectedMonthNormalized.set(Calendar.HOUR_OF_DAY, 0);
+        selectedMonthNormalized.set(Calendar.MINUTE, 0);
+        selectedMonthNormalized.set(Calendar.SECOND, 0);
+        selectedMonthNormalized.set(Calendar.MILLISECOND, 0);
+        
+        boolean isCurrentOrFutureMonth = !selectedMonthNormalized.before(currentMonth);
+        
+        if (isCurrentOrFutureMonth) {
+            for (Map.Entry<String, List<Transaction>> entry : merchantGroups.entrySet()) {
+                String merchant = entry.getKey();
+                List<Transaction> merchantTransactions = entry.getValue();
                 
-                if (!alreadyOccurred) {
-                    // Create status message based on confidence level
-                    String status;
-                    if (pattern.confidence >= 100) {
-                        status = "🔮 Predicted (100% confidence)";
-                    } else if (pattern.confidence >= 85) {
-                        status = "📊 Expected (" + pattern.confidence + "% confidence)";
-                    } else if (pattern.confidence >= 70) {
-                        status = "💭 Likely (" + pattern.confidence + "% confidence)";
-                    } else {
-                        status = "❓ Possible (" + pattern.confidence + "% confidence)";
+                // Analyze patterns using complex logic
+                RecurringPattern pattern = analyzeRecurringPattern(merchant, merchantTransactions, selectedMonth);
+                
+                if (pattern.isRecurring && pattern.confidence >= 85 && pattern.shouldOccurThisMonth) {
+                    // Check if we already have this transaction in occurred list
+                    boolean alreadyOccurred = recurringExpenses.stream()
+                        .anyMatch(expense -> expense.description.toLowerCase().contains(merchant.toLowerCase()) && 
+                                 expense.icon.equals("✅ Occurred"));
+                    
+                    if (!alreadyOccurred) {
+                        // Create status message based on confidence level
+                        String status;
+                        if (pattern.confidence >= 100) {
+                            status = "🔮 Predicted (100% confidence)";
+                        } else if (pattern.confidence >= 85) {
+                            status = "📊 Expected (" + pattern.confidence + "% confidence)";
+                        } else if (pattern.confidence >= 70) {
+                            status = "💭 Likely (" + pattern.confidence + "% confidence)";
+                        } else {
+                            status = "❓ Possible (" + pattern.confidence + "% confidence)";
+                        }
+                        
+                        recurringExpenses.add(new SimpleRecurringExpensesAdapter.RecurringExpenseData(
+                            pattern.displayName,
+                            pattern.predictedAmount,
+                            pattern.frequency,
+                            status
+                        ));
+                        
+                        Log.d(TAG, "Predicted recurring: " + pattern.displayName + " - ₹" + pattern.predictedAmount + 
+                            " (" + pattern.confidence + "% confidence)");
                     }
-                    
-                    recurringExpenses.add(new SimpleRecurringExpensesAdapter.RecurringExpenseData(
-                        pattern.displayName,
-                        pattern.predictedAmount,
-                        pattern.frequency,
-                        status
-                    ));
-                    
-                    Log.d(TAG, "Predicted recurring: " + pattern.displayName + " - ₹" + pattern.predictedAmount + 
-                        " (" + pattern.confidence + "% confidence)");
                 }
             }
+        } else {
+            Log.d(TAG, "Skipping predictions for past month: " + selectedMonth.get(Calendar.YEAR) + "-" + (selectedMonth.get(Calendar.MONTH) + 1));
         }
         
         // Sort by status first (occurred first), then by amount
@@ -1300,6 +1473,33 @@ public class AnalyticsActivity extends AppCompatActivity {
         boolean shouldOccurThisMonth = false;
     }
     
+    /**
+     * Setup collapsible functionality for recurring expenses section
+     */
+    private void setupRecurringExpensesCollapse() {
+        if (recurringExpensesHeader != null) {
+            recurringExpensesHeader.setOnClickListener(v -> {
+                isRecurringExpensesExpanded = !isRecurringExpensesExpanded;
+                updateRecurringExpensesCollapse();
+            });
+        }
+    }
+    
+    /**
+     * Update the visual state of the collapsible recurring expenses section
+     */
+    private void updateRecurringExpensesCollapse() {
+        if (recurringExpensesContent != null && recurringExpensesToggle != null) {
+            if (isRecurringExpensesExpanded) {
+                recurringExpensesContent.setVisibility(View.VISIBLE);
+                recurringExpensesToggle.setText("▼"); // Down arrow
+            } else {
+                recurringExpensesContent.setVisibility(View.GONE);
+                recurringExpensesToggle.setText("▶"); // Right arrow
+            }
+        }
+    }
+    
     
     
     private void updateSpendingVelocity(List<Transaction> transactions) {
@@ -1310,14 +1510,75 @@ public class AnalyticsActivity extends AppCompatActivity {
             }
         }
         
-        int dayOfMonth = Calendar.getInstance().get(Calendar.DAY_OF_MONTH);
-        double dailyRate = totalSpent / dayOfMonth;
+        // Calculate days elapsed in the selected month, not current month
+        Calendar now = Calendar.getInstance();
+        Calendar monthStart = (Calendar) selectedMonth.clone();
+        monthStart.set(Calendar.DAY_OF_MONTH, 1);
+        
+        // If viewing current month, use days elapsed, otherwise use full month
+        int daysToUse;
+        if (selectedMonth.get(Calendar.YEAR) == now.get(Calendar.YEAR) && 
+            selectedMonth.get(Calendar.MONTH) == now.get(Calendar.MONTH)) {
+            // Current month - use days elapsed
+            long diffInMillis = now.getTimeInMillis() - monthStart.getTimeInMillis();
+            daysToUse = Math.max(1, (int) (diffInMillis / (1000 * 60 * 60 * 24)) + 1);
+        } else {
+            // Past month - use all days in that month
+            daysToUse = selectedMonth.getActualMaximum(Calendar.DAY_OF_MONTH);
+        }
+        
+        double dailyRate = totalSpent / daysToUse;
         
         if (currentBurnRateText != null) {
             currentBurnRateText.setText("Current rate: " + formatCurrency(dailyRate) + "/day");
         }
+        
+        // Calculate last month comparison
         if (burnRateChangeText != null) {
-            burnRateChangeText.setText("vs last month: calculating...");
+            Calendar lastMonth = (Calendar) selectedMonth.clone();
+            lastMonth.add(Calendar.MONTH, -1);
+            
+            // Calculate date range for last month
+            Calendar lastMonthStart = (Calendar) lastMonth.clone();
+            lastMonthStart.set(Calendar.DAY_OF_MONTH, 1);
+            lastMonthStart.set(Calendar.HOUR_OF_DAY, 0);
+            lastMonthStart.set(Calendar.MINUTE, 0);
+            lastMonthStart.set(Calendar.SECOND, 0);
+            lastMonthStart.set(Calendar.MILLISECOND, 0);
+            
+            Calendar lastMonthEnd = (Calendar) lastMonth.clone();
+            lastMonthEnd.set(Calendar.DAY_OF_MONTH, lastMonth.getActualMaximum(Calendar.DAY_OF_MONTH));
+            lastMonthEnd.set(Calendar.HOUR_OF_DAY, 23);
+            lastMonthEnd.set(Calendar.MINUTE, 59);
+            lastMonthEnd.set(Calendar.SECOND, 59);
+            lastMonthEnd.set(Calendar.MILLISECOND, 999);
+            
+            viewModel.getMonthlyData(lastMonthStart.getTimeInMillis(), lastMonthEnd.getTimeInMillis()).observe(this, lastMonthData -> {
+                if (lastMonthData != null && lastMonthData.getTotalExpenses() > 0) {
+                    // Calculate last month's daily rate
+                    int lastMonthDays = lastMonth.getActualMaximum(Calendar.DAY_OF_MONTH);
+                    double lastMonthDailyRate = lastMonthData.getTotalExpenses() / lastMonthDays;
+                    
+                    Log.d("Analytics", "Current daily rate: " + dailyRate + ", Last month daily rate: " + lastMonthDailyRate);
+                    
+                    // Calculate percentage change
+                    double changePercent = lastMonthDailyRate > 0 ? 
+                        ((dailyRate - lastMonthDailyRate) / lastMonthDailyRate) * 100 : 0;
+                    
+                    String changeText;
+                    if (Math.abs(changePercent) < 0.1) {
+                        changeText = "vs last month: No change";
+                    } else if (changePercent > 0) {
+                        changeText = String.format(Locale.getDefault(), "vs last month: +%.1f%% ↗", changePercent);
+                    } else {
+                        changeText = String.format(Locale.getDefault(), "vs last month: %.1f%% ↘", changePercent);
+                    }
+                    
+                    burnRateChangeText.setText(changeText);
+                } else {
+                    burnRateChangeText.setText("vs last month: No data");
+                }
+            });
         }
         
         double budget = preferencesManager.hasBudgetAmount() ? 
@@ -1336,6 +1597,7 @@ public class AnalyticsActivity extends AppCompatActivity {
     
     private void updateTopMerchants(List<Transaction> transactions) {
         Map<String, Double> merchantTotals = new HashMap<>();
+        Map<String, Integer> merchantFrequency = new HashMap<>();
         double totalSpent = 0;
         
         for (Transaction t : transactions) {
@@ -1344,8 +1606,28 @@ public class AnalyticsActivity extends AppCompatActivity {
                 if (merchant != null) {
                     merchant = merchant.trim();
                     merchantTotals.merge(merchant, t.getAmount(), Double::sum);
+                    merchantFrequency.merge(merchant, 1, Integer::sum);
                     totalSpent += t.getAmount();
                 }
+            }
+        }
+        
+        // Calculate most frequent merchant
+        String mostFrequentMerchant = "No data";
+        int maxFrequency = 0;
+        for (Map.Entry<String, Integer> entry : merchantFrequency.entrySet()) {
+            if (entry.getValue() > maxFrequency) {
+                maxFrequency = entry.getValue();
+                mostFrequentMerchant = entry.getKey();
+            }
+        }
+        
+        // Update the biggest expense text to show most frequent merchant
+        if (biggestExpenseText != null) {
+            if (maxFrequency > 0) {
+                biggestExpenseText.setText("• Most frequent: " + mostFrequentMerchant + " (" + maxFrequency + " times)");
+            } else {
+                biggestExpenseText.setText("• Most frequent: No data available");
             }
         }
         
@@ -1403,8 +1685,44 @@ public class AnalyticsActivity extends AppCompatActivity {
         double avgPerDay = (double) transactions.size() / dayOfMonth;
         
         avgTransactionsText.setText("Average: " + String.format("%.1f", avgPerDay) + " transactions/day");
-        mostActiveText.setText("Most active: Calculating...");
-        leastActiveText.setText("Least active: Calculating...");
+        
+        // Calculate daily transaction counts
+        Map<String, Integer> dailyCounts = new HashMap<>();
+        String[] dayNames = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+        
+        // Initialize all days with 0
+        for (String day : dayNames) {
+            dailyCounts.put(day, 0);
+        }
+        
+        // Count transactions per day of week
+        for (Transaction t : transactions) {
+            Calendar cal = Calendar.getInstance();
+            cal.setTimeInMillis(t.getDate());
+            int dayOfWeek = cal.get(Calendar.DAY_OF_WEEK) - 1; // 0 = Sunday
+            String dayName = dayNames[dayOfWeek];
+            dailyCounts.put(dayName, dailyCounts.get(dayName) + 1);
+        }
+        
+        // Find most and least active days
+        String mostActiveDay = "";
+        String leastActiveDay = "";
+        int maxCount = -1;
+        int minCount = Integer.MAX_VALUE;
+        
+        for (Map.Entry<String, Integer> entry : dailyCounts.entrySet()) {
+            if (entry.getValue() > maxCount) {
+                maxCount = entry.getValue();
+                mostActiveDay = entry.getKey();
+            }
+            if (entry.getValue() < minCount) {
+                minCount = entry.getValue();
+                leastActiveDay = entry.getKey();
+            }
+        }
+        
+        mostActiveText.setText("Most active: " + mostActiveDay + " (" + maxCount + " txns)");
+        leastActiveText.setText("Least active: " + leastActiveDay + " (" + minCount + " txns)");
         
         // Update total transactions text
         if (totalTransactionsText != null) {
