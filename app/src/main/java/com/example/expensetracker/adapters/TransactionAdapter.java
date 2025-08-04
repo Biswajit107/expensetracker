@@ -138,7 +138,7 @@ public class TransactionAdapter extends RecyclerView.Adapter<TransactionAdapter.
 
         void bind(Transaction transaction) {
             SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
-            SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.getDefault());
+            SimpleDateFormat timeFormat = new SimpleDateFormat("hh:mm a", Locale.getDefault());
             
             Date transactionDate = new Date(transaction.getDate());
             dateText.setText(dateFormat.format(transactionDate));

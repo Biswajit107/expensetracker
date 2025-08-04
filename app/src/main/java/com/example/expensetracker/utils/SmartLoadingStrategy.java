@@ -762,6 +762,42 @@ public class SmartLoadingStrategy {
     }
 
     /**
+     * Update the RecyclerView with TQL results
+     */
+    public void setTransactionsFromTQL(List<Transaction> transactions) {
+        if (transactions == null) {
+            transactions = new ArrayList<>();
+        }
+        
+        Log.d(TAG, "Setting transactions from TQL: " + transactions.size() + " transactions");
+        
+        // Always use individual transaction view for TQL results to show the actual matching transactions
+        isGroupedViewActive = false;
+        
+        // Update the individual transaction adapter
+        transactionAdapter.setTransactions(transactions);
+        
+        // Make sure we're using the right adapter
+        if (recyclerView.getAdapter() != transactionAdapter) {
+            recyclerView.setAdapter(transactionAdapter);
+        }
+        
+        // Update visibility
+        if (transactions.isEmpty()) {
+            recyclerView.setVisibility(View.GONE);
+            emptyStateText.setVisibility(View.VISIBLE);
+            emptyStateText.setText("No transactions match your query");
+        } else {
+            recyclerView.setVisibility(View.VISIBLE);
+            emptyStateText.setVisibility(View.GONE);
+        }
+        
+        if (loadingIndicator != null) {
+            loadingIndicator.setVisibility(View.GONE);
+        }
+    }
+
+    /**
      * Get the current grouping mode
      * @return The grouping mode
      */

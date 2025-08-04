@@ -18,6 +18,17 @@ public class TransactionSearchFilter {
     private Boolean excludedFromTotal;
     private Boolean isRecurring;
     private String merchantName;
+    
+    // Time-of-day filtering
+    private String timeOfDayOperator; // "after", "before"
+    private Integer timeOfDayHour;
+    private Integer timeOfDayMinute;
+    
+    // Time range-of-day filtering
+    private Integer startTimeHour;
+    private Integer startTimeMinute;
+    private Integer endTimeHour;
+    private Integer endTimeMinute;
 
     // Builder pattern for creating search filters
     public static class Builder {
@@ -73,6 +84,21 @@ public class TransactionSearchFilter {
             filter.merchantName = merchantName;
             return this;
         }
+        
+        public Builder timeOfDayFilter(String operator, int hour, int minute) {
+            filter.timeOfDayOperator = operator;
+            filter.timeOfDayHour = hour;
+            filter.timeOfDayMinute = minute;
+            return this;
+        }
+        
+        public Builder timeRangeOfDayFilter(int startHour, int startMinute, int endHour, int endMinute) {
+            filter.startTimeHour = startHour;
+            filter.startTimeMinute = startMinute;
+            filter.endTimeHour = endHour;
+            filter.endTimeMinute = endMinute;
+            return this;
+        }
 
         public TransactionSearchFilter build() {
             return filter;
@@ -81,10 +107,19 @@ public class TransactionSearchFilter {
 
     // Build a query based on the filter parameters
     public SupportSQLiteQuery buildSearchQuery() {
+        android.util.Log.d("TransactionSearchFilter", "=== BUILDING SEARCH QUERY ===");
+        
         StringBuilder queryBuilder = new StringBuilder();
         List<Object> args = new ArrayList<>();
 
         queryBuilder.append("SELECT * FROM transactions WHERE 1=1");
+        
+        android.util.Log.d("TransactionSearchFilter", "Filter parameters:");
+        android.util.Log.d("TransactionSearchFilter", "  searchText: " + searchText);
+        android.util.Log.d("TransactionSearchFilter", "  startDate: " + startDate);
+        android.util.Log.d("TransactionSearchFilter", "  endDate: " + endDate);
+        android.util.Log.d("TransactionSearchFilter", "  bank: " + bank);
+        android.util.Log.d("TransactionSearchFilter", "  category: " + category);
 
         // Add search text filter (searches across multiple columns)
         if (searchText != null && !searchText.isEmpty()) {
@@ -139,11 +174,17 @@ public class TransactionSearchFilter {
         if (startDate != null) {
             queryBuilder.append(" AND date >= ?");
             args.add(startDate);
+            android.util.Log.d("TransactionSearchFilter", "Added startDate filter: date >= " + startDate);
+            android.util.Log.d("TransactionSearchFilter", "  Date formatted: " + 
+                new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date(startDate)));
         }
 
         if (endDate != null) {
             queryBuilder.append(" AND date <= ?");
             args.add(endDate);
+            android.util.Log.d("TransactionSearchFilter", "Added endDate filter: date <= " + endDate);
+            android.util.Log.d("TransactionSearchFilter", "  Date formatted: " + 
+                new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date(endDate)));
         }
 
         if (excludedFromTotal != null) {
@@ -160,9 +201,67 @@ public class TransactionSearchFilter {
             queryBuilder.append(" AND merchant_name LIKE ?");
             args.add("%" + merchantName + "%");
         }
+        
+        // Handle time-of-day filtering
+        if (timeOfDayOperator != null && timeOfDayHour != null && timeOfDayMinute != null) {
+            android.util.Log.d("TransactionSearchFilter", "*** ADDING TIME-OF-DAY FILTER ***");
+            android.util.Log.d("TransactionSearchFilter", "Filter: " + timeOfDayOperator + " " + timeOfDayHour + ":" + String.format("%02d", timeOfDayMinute));
+            
+            // Simpler approach: just extract hour and compare (ignoring minutes for now to test)
+            String hourExtractSql = "CAST(strftime('%H', datetime(date/1000, 'unixepoch', 'localtime')) AS INTEGER)";
+            
+            switch (timeOfDayOperator.toLowerCase()) {
+                case "after":
+                case "since":
+                    queryBuilder.append(" AND ").append(hourExtractSql).append(" >= ?");
+                    args.add(timeOfDayHour);
+                    android.util.Log.d("TransactionSearchFilter", "Added AFTER hour filter: hour >= " + timeOfDayHour);
+                    android.util.Log.d("TransactionSearchFilter", "SQL fragment: " + hourExtractSql + " >= " + timeOfDayHour);
+                    break;
+                case "before":
+                case "until":
+                    queryBuilder.append(" AND ").append(hourExtractSql).append(" < ?");
+                    args.add(timeOfDayHour);
+                    android.util.Log.d("TransactionSearchFilter", "Added BEFORE hour filter: hour < " + timeOfDayHour);
+                    android.util.Log.d("TransactionSearchFilter", "SQL fragment: " + hourExtractSql + " < " + timeOfDayHour);
+                    break;
+            }
+        }
+        
+        // Handle time range-of-day filtering
+        if (startTimeHour != null && startTimeMinute != null && endTimeHour != null && endTimeMinute != null) {
+            android.util.Log.d("TransactionSearchFilter", "*** ADDING TIME-RANGE-OF-DAY FILTER ***");
+            android.util.Log.d("TransactionSearchFilter", "Time range: " + startTimeHour + ":" + String.format("%02d", startTimeMinute) + 
+                              " to " + endTimeHour + ":" + String.format("%02d", endTimeMinute));
+            
+            // Extract hour and minute from timestamp and check if it falls within the range
+            String hourExtractSql = "CAST(strftime('%H', datetime(date/1000, 'unixepoch', 'localtime')) AS INTEGER)";
+            String minuteExtractSql = "CAST(strftime('%M', datetime(date/1000, 'unixepoch', 'localtime')) AS INTEGER)";
+            
+            // Convert times to total minutes for easier comparison
+            int startTotalMinutes = startTimeHour * 60 + startTimeMinute;
+            int endTotalMinutes = endTimeHour * 60 + endTimeMinute;
+            
+            // Create SQL for total minutes: hour * 60 + minute
+            String totalMinutesSql = "(" + hourExtractSql + " * 60 + " + minuteExtractSql + ")";
+            
+            queryBuilder.append(" AND ").append(totalMinutesSql).append(" >= ? AND ").append(totalMinutesSql).append(" <= ?");
+            args.add(startTotalMinutes);
+            args.add(endTotalMinutes);
+            
+            android.util.Log.d("TransactionSearchFilter", "Added time range filter: " + startTotalMinutes + " <= minutes <= " + endTotalMinutes);
+            android.util.Log.d("TransactionSearchFilter", "SQL fragment: " + totalMinutesSql + " BETWEEN " + startTotalMinutes + " AND " + endTotalMinutes);
+        }
 
         // Add order by date (most recent first)
         queryBuilder.append(" ORDER BY date DESC");
+
+        android.util.Log.d("TransactionSearchFilter", "Final SQL query: " + queryBuilder.toString());
+        android.util.Log.d("TransactionSearchFilter", "Query args count: " + args.size());
+        for (int i = 0; i < args.size(); i++) {
+            android.util.Log.d("TransactionSearchFilter", "  Arg " + i + ": " + args.get(i) + " (" + args.get(i).getClass().getSimpleName() + ")");
+        }
+        android.util.Log.d("TransactionSearchFilter", "=== QUERY BUILD COMPLETE ===");
 
         return new SimpleSQLiteQuery(queryBuilder.toString(), args.toArray());
     }

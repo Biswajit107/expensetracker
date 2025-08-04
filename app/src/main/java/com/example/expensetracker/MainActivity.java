@@ -9,6 +9,7 @@ import android.content.Context;
 import android.view.KeyEvent;
 import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
+import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
 import android.widget.ImageButton;
@@ -79,7 +80,15 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.google.android.material.slider.RangeSlider;
 import com.google.android.material.snackbar.Snackbar;
+import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.TextInputEditText;
+
+// TQL imports
+import com.example.expensetracker.database.TQLParser;
+import com.example.expensetracker.database.TQLProcessor;
+import com.example.expensetracker.database.TQLQuery;
+import com.example.expensetracker.database.dynamic.SimpleDynamicTQLParser;
+import com.example.expensetracker.viewmodel.SearchViewModel;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -134,6 +143,22 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
     private ViewMode currentViewMode = ViewMode.LIST; // Default to list mode
 
     private boolean isQuickEntryVisible = false;
+    
+    // TQL related fields
+    private SwitchMaterial tqlModeSwitch;
+    private MaterialCardView tqlResultCard;
+    private TextView tqlResultSummary;
+    private TextView tqlOriginalQuery;
+    private TQLProcessor tqlProcessor;
+    private boolean isTQLMode = false;
+    
+    // TQL debounce mechanism
+    private static final long TQL_DEBOUNCE_TIME_MS = 500;
+    private static final long TQL_SUGGESTION_DEBOUNCE_TIME_MS = 1000;
+    private Handler tqlHandler = new Handler();
+    private Runnable pendingTQLRunnable;
+    private Runnable pendingTQLSuggestionRunnable;
+    private volatile boolean isTQLProcessing = false;
 
     private enum ViewMode {
         LIST,              // Individual transactions with pagination
@@ -160,6 +185,7 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
         setupRecyclerView();
         setupViewModel();
         setupDateRangeUI();
+        setupMonthNavigation();
         setupDefaultDates();
 
         // Set up components
@@ -357,12 +383,403 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
                     searchInput.setText("");
                 }
 
+                // Clear TQL mode and results
+                if (tqlModeSwitch != null) {
+                    tqlModeSwitch.setChecked(false);
+                }
+                isTQLMode = false;
+                if (tqlResultCard != null) {
+                    tqlResultCard.setVisibility(View.GONE);
+                }
+
                 // Reload data with no filters
                 if (smartLoadingStrategy != null) {
                     smartLoadingStrategy.updateFilterState(currentFilterState);
                     smartLoadingStrategy.refreshData(fromDate, toDate);
                 }
             });
+        }
+        
+        // Initialize TQL components
+        initializeTQLComponents();
+    }
+
+    private void initializeTQLComponents() {
+        // Find TQL UI components
+        tqlModeSwitch = findViewById(R.id.tqlModeSwitch);
+        tqlResultCard = findViewById(R.id.tqlResultCard);
+        tqlResultSummary = findViewById(R.id.tqlResultSummary);
+        tqlOriginalQuery = findViewById(R.id.tqlOriginalQuery);
+        
+        // Initialize TQL processor
+        tqlProcessor = new TQLProcessor(getApplication());
+        
+        // Set up TQL mode toggle
+        if (tqlModeSwitch != null) {
+            tqlModeSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                Log.d(TAG, "TQL mode toggled: " + isChecked);
+                
+                // Update TQL mode state
+                isTQLMode = isChecked;
+                
+                // Update search hint
+                if (searchInput != null) {
+                    if (isChecked) {
+                        searchInput.setHint("Type query & press search: 'transactions > 100 from swiggy'");
+                    } else {
+                        searchInput.setHint("Search transactions or amounts");
+                    }
+                }
+                
+                // Clear TQL results when switching modes
+                if (!isChecked && tqlResultCard != null) {
+                    tqlResultCard.setVisibility(View.GONE);
+                    
+                    // Hide filter indicator if no other filters are active
+                    if (filterIndicatorContainer != null && !currentFilterState.isAnyFilterActive()) {
+                        filterIndicatorContainer.setVisibility(View.GONE);
+                    }
+                    
+                    // Return to normal search behavior if there's text in the search box
+                    if (searchInput != null && !searchInput.getText().toString().trim().isEmpty()) {
+                        String currentText = searchInput.getText().toString();
+                        Log.d(TAG, "Switching back to normal search for: " + currentText);
+                        filterTransactions(currentText);
+                    }
+                }
+                
+                // If there's existing text when enabling TQL mode, process it when user searches
+                if (isChecked && searchInput != null) {
+                    String currentText = searchInput.getText().toString();
+                    if (!currentText.trim().isEmpty()) {
+                        Log.d(TAG, "TQL mode enabled with existing text. User can press search to execute: " + currentText);
+                        // Don't auto-execute, wait for user to press search button
+                    }
+                }
+            });
+        }
+        
+        // Initially hide TQL result card
+        if (tqlResultCard != null) {
+            tqlResultCard.setVisibility(View.GONE);
+        }
+    }
+
+    private void processTQLQueryWithDateRange(String queryText, long fromDate, long toDate) {
+        if (queryText == null || queryText.trim().isEmpty()) {
+            if (tqlResultCard != null) {
+                tqlResultCard.setVisibility(View.GONE);
+            }
+            // Hide filter indicator if no other filters are active
+            if (filterIndicatorContainer != null && !currentFilterState.isAnyFilterActive()) {
+                filterIndicatorContainer.setVisibility(View.GONE);
+            }
+            // Clear any pending TQL queries
+            if (pendingTQLRunnable != null) {
+                tqlHandler.removeCallbacks(pendingTQLRunnable);
+                pendingTQLRunnable = null;
+            }
+            return;
+        }
+
+        Log.d(TAG, "Scheduling TQL query: " + queryText);
+        
+        // Cancel any pending TQL query
+        if (pendingTQLRunnable != null) {
+            tqlHandler.removeCallbacks(pendingTQLRunnable);
+        }
+        
+        // Create new debounced runnable
+        pendingTQLRunnable = () -> {
+            // Check if already processing
+            if (isTQLProcessing) {
+                Log.d(TAG, "TQL query already in progress, skipping: " + queryText);
+                return;
+            }
+            
+            Log.d(TAG, "Executing TQL query: " + queryText);
+            
+            // Show loading state
+            if (loadingIndicator != null) {
+                loadingIndicator.setVisibility(View.VISIBLE);
+            }
+
+            // Process in background thread
+            executorService.execute(() -> {
+                isTQLProcessing = true;
+            try {
+                // Parse the natural language query - use dynamic parser for time expressions
+                TQLQuery tqlQuery;
+                
+                // Check if query has time expressions - use dynamic parser for better support
+                boolean hasTimeExpression = SimpleDynamicTQLParser.hasTimeExpression(queryText);
+                Log.d(TAG, "Query: '" + queryText + "', has time expression: " + hasTimeExpression);
+                
+                if (hasTimeExpression) {
+                    Log.d(TAG, "Time expression detected, using SimpleDynamicTQLParser");
+                    tqlQuery = SimpleDynamicTQLParser.parse(queryText);
+                } else {
+                    // Use existing parser for non-time queries
+                    Log.d(TAG, "No time expression detected, using standard TQLParser");
+                    tqlQuery = TQLParser.parse(queryText);
+                }
+                Log.d(TAG, "Parsed TQL query: " + tqlQuery.toString());
+
+                // Process the query with date range and respect current exclusion settings
+                Log.d(TAG, "TQL exclusion settings - showingExcluded: " + currentFilterState.showingExcluded + 
+                          ", viewingManuallyExcluded: " + currentFilterState.viewingManuallyExcluded);
+                
+                TQLProcessor.TQLResult result = tqlProcessor.processTQLQueryWithDateRangeAndExclusions(
+                    tqlQuery, fromDate, toDate, 
+                    currentFilterState.showingExcluded, 
+                    currentFilterState.viewingManuallyExcluded
+                );
+                Log.d(TAG, "TQL Result type: " + (result.isTransactionResult() ? "Transaction" : result.isAggregateResult() ? "Aggregate" : "Group"));
+                Log.d(TAG, "Date range: " + fromDate + " to " + toDate);
+
+                // Update UI on main thread
+                runOnUiThread(() -> {
+                    updateTQLResults(result);
+                    if (loadingIndicator != null) {
+                        loadingIndicator.setVisibility(View.GONE);
+                    }
+                    isTQLProcessing = false;
+                });
+
+            } catch (Exception e) {
+                Log.e(TAG, "TQL Query error", e);
+                runOnUiThread(() -> {
+                    showTQLError("Error processing query: " + e.getMessage());
+                    if (loadingIndicator != null) {
+                        loadingIndicator.setVisibility(View.GONE);
+                    }
+                    isTQLProcessing = false;
+                });
+            }
+            });
+        };
+        
+        // Schedule the debounced query
+        tqlHandler.postDelayed(pendingTQLRunnable, TQL_DEBOUNCE_TIME_MS);
+    }
+
+    private void updateTQLResults(TQLProcessor.TQLResult result) {
+        if (result == null) {
+            if (tqlResultCard != null) {
+                tqlResultCard.setVisibility(View.GONE);
+            }
+            // Hide filter indicator when TQL results are cleared
+            if (filterIndicatorContainer != null && !currentFilterState.isAnyFilterActive()) {
+                filterIndicatorContainer.setVisibility(View.GONE);
+            }
+            return;
+        }
+
+        if (result.isError()) {
+            showTQLError(result.getErrorMessage());
+            return;
+        }
+
+        // Show result summary
+        if (tqlResultCard != null && tqlResultSummary != null && tqlOriginalQuery != null) {
+            tqlResultCard.setVisibility(View.VISIBLE);
+            tqlOriginalQuery.setText("Query: \"" + result.getOriginalQuery() + "\"");
+
+            if (result.isAggregateResult()) {
+                // Show aggregate result
+                Number value = result.getAggregateValue();
+                String label = result.getAggregateLabel();
+
+                if (label.contains("amount")) {
+                    tqlResultSummary.setText(String.format(Locale.getDefault(),
+                            "💰 Result: ₹%.2f %s", value.doubleValue(), label));
+                } else {
+                    tqlResultSummary.setText(String.format(Locale.getDefault(),
+                            "📊 Result: %s %s", formatNumber(value), label));
+                }
+                
+                // For aggregate results, show the source transactions that were used for the calculation
+                List<Transaction> sourceTransactions = result.getTransactions();
+                if (smartLoadingStrategy != null) {
+                    if (sourceTransactions != null && !sourceTransactions.isEmpty()) {
+                        smartLoadingStrategy.setTransactionsFromTQL(sourceTransactions);
+                    } else {
+                        smartLoadingStrategy.setTransactionsFromTQL(new ArrayList<>());
+                    }
+                }
+
+            } else if (result.isGroupResult()) {
+                // Show group result summary and display transactions from all groups
+                List<TQLProcessor.TQLGroupResult> groups = result.getGroupResults();
+                if (groups != null && !groups.isEmpty()) {
+                    tqlResultSummary.setText(String.format(Locale.getDefault(),
+                            "📈 Found %d groups, top: %s (₹%.2f)",
+                            groups.size(),
+                            groups.get(0).getGroupName(),
+                            groups.get(0).getTotalAmount()));
+                    
+                    // Collect all transactions from all groups to show in the list
+                    List<Transaction> allTransactions = new ArrayList<>();
+                    for (TQLProcessor.TQLGroupResult group : groups) {
+                        if (group.getTransactions() != null) {
+                            allTransactions.addAll(group.getTransactions());
+                        }
+                    }
+                    
+                    // Update the transaction list display
+                    if (smartLoadingStrategy != null) {
+                        smartLoadingStrategy.setTransactionsFromTQL(allTransactions);
+                    }
+                } else {
+                    tqlResultSummary.setText("📈 No groups found");
+                    // Show empty list
+                    if (smartLoadingStrategy != null) {
+                        smartLoadingStrategy.setTransactionsFromTQL(new ArrayList<>());
+                    }
+                }
+
+            } else if (result.isTransactionResult()) {
+                // Show transaction result summary and update the list
+                List<Transaction> transactions = result.getTransactions();
+                if (transactions != null) {
+                    double total = transactions.stream()
+                            .filter(t -> !t.isExcludedFromTotal())
+                            .mapToDouble(Transaction::getAmount)
+                            .sum();
+
+                    tqlResultSummary.setText(String.format(Locale.getDefault(),
+                            "💳 Found %d transactions, Total: ₹%.2f",
+                            transactions.size(), total));
+
+                    // Update the transaction list display using SmartLoadingStrategy
+                    if (smartLoadingStrategy != null) {
+                        smartLoadingStrategy.setTransactionsFromTQL(transactions);
+                    }
+                } else {
+                    tqlResultSummary.setText("💳 No transactions found");
+                    // Show empty list
+                    if (smartLoadingStrategy != null) {
+                        smartLoadingStrategy.setTransactionsFromTQL(new ArrayList<>());
+                    }
+                }
+            }
+        }
+        
+        // Show TQL query in filter indicator
+        if (filterIndicatorContainer != null && filterIndicator != null) {
+            filterIndicatorContainer.setVisibility(View.VISIBLE);
+            filterIndicator.setText("TQL: " + result.getOriginalQuery());
+            
+            if (resultCount != null) {
+                if (result.isTransactionResult() && result.getTransactions() != null) {
+                    resultCount.setText(result.getTransactions().size() + " results");
+                } else if (result.isAggregateResult()) {
+                    resultCount.setText("Aggregate result");
+                } else if (result.isGroupResult() && result.getGroupResults() != null) {
+                    resultCount.setText(result.getGroupResults().size() + " groups");
+                } else {
+                    resultCount.setText("No results");
+                }
+            }
+        }
+    }
+
+    private void showTQLError(String errorMessage) {
+        if (tqlResultCard != null && tqlResultSummary != null) {
+            tqlResultCard.setVisibility(View.VISIBLE);
+            tqlResultSummary.setText("❌ " + errorMessage);
+            if (tqlOriginalQuery != null) {
+                tqlOriginalQuery.setText("");
+            }
+        }
+        
+        // Show error in filter indicator
+        if (filterIndicatorContainer != null && filterIndicator != null) {
+            filterIndicatorContainer.setVisibility(View.VISIBLE);
+            filterIndicator.setText("TQL Error: " + errorMessage);
+            
+            if (resultCount != null) {
+                resultCount.setText("Error");
+            }
+        }
+        Log.e(TAG, "TQL Error: " + errorMessage);
+    }
+
+    private String formatNumber(Number number) {
+        if (number.doubleValue() == number.intValue()) {
+            return String.valueOf(number.intValue());
+        } else {
+            return String.format(Locale.getDefault(), "%.2f", number.doubleValue());
+        }
+    }
+
+    private boolean looksLikeTQLQuery(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return false;
+        }
+
+        String lower = text.toLowerCase().trim();
+        Log.d(TAG, "Checking if text looks like TQL: '" + lower + "'");
+
+        // Check for TQL keywords
+        boolean result = lower.contains(">") || lower.contains("<") || lower.contains("=") ||
+                lower.startsWith("count") || lower.startsWith("total") || lower.startsWith("sum") ||
+                lower.startsWith("average") || lower.startsWith("avg") || lower.startsWith("max") ||
+                lower.startsWith("min") || lower.contains("group by") ||
+                lower.contains("from ") || lower.contains("on ") || lower.contains("between") ||
+                lower.contains("last month") || lower.contains("this month") ||
+                lower.contains("last week") || lower.contains("this week");
+
+        Log.d(TAG, "TQL detection result: " + result);
+        return result;
+    }
+
+    private void showTQLSuggestion(String query) {
+        if (query == null || query.trim().isEmpty()) {
+            return;
+        }
+
+        Log.d(TAG, "Showing TQL suggestion for: " + query);
+
+        // Highlight the TQL switch temporarily
+        highlightTQLSwitch();
+
+        // Show snackbar suggesting to enable TQL mode
+        Snackbar snackbar = Snackbar.make(findViewById(android.R.id.content),
+                "🧠 This looks like a smart query! Enable TQL mode?",
+                Snackbar.LENGTH_LONG);
+
+        snackbar.setAction("ENABLE", v -> {
+            Log.d(TAG, "User clicked ENABLE TQL for query: " + query);
+
+            // Enable TQL mode and set the switch
+            if (tqlModeSwitch != null) {
+                tqlModeSwitch.setChecked(true);
+            }
+
+            // The search text is already there, TQL will be processed automatically
+            // due to the toggle listener
+        });
+
+        snackbar.setActionTextColor(getResources().getColor(android.R.color.white));
+        snackbar.show();
+    }
+
+    private void highlightTQLSwitch() {
+        // Add a subtle animation to draw attention to the switch
+        if (tqlModeSwitch != null) {
+            tqlModeSwitch.animate()
+                    .scaleX(1.1f)
+                    .scaleY(1.1f)
+                    .setDuration(200)
+                    .withEndAction(() -> {
+                        tqlModeSwitch.animate()
+                                .scaleX(1.0f)
+                                .scaleY(1.0f)
+                                .setDuration(200)
+                                .start();
+                    })
+                    .start();
         }
     }
 
@@ -818,6 +1235,8 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
 
             @Override
             public void afterTextChanged(Editable s) {
+                String searchText = s.toString();
+                
                 // Show clear button if there's text
                 if (s.length() > 0 && clearSearchButton.getVisibility() != View.VISIBLE) {
                     clearSearchButton.setVisibility(View.VISIBLE);
@@ -827,9 +1246,53 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
                     clearSearchButton.setVisibility(View.GONE);
                 }
 
-                // Apply search filter
-                filterTransactions(s.toString());
+                // Only show TQL suggestions for non-TQL mode, don't execute queries automatically
+                if (!isTQLMode) {
+                    // Smart detection: Check if query looks like TQL when not in TQL mode (debounced)
+                    if (!searchText.trim().isEmpty() && looksLikeTQLQuery(searchText)) {
+                        Log.d(TAG, "Detected TQL pattern, scheduling suggestion");
+                        
+                        // Cancel any pending suggestion
+                        if (pendingTQLSuggestionRunnable != null) {
+                            tqlHandler.removeCallbacks(pendingTQLSuggestionRunnable);
+                        }
+                        
+                        // Schedule debounced suggestion
+                        pendingTQLSuggestionRunnable = () -> showTQLSuggestion(searchText);
+                        tqlHandler.postDelayed(pendingTQLSuggestionRunnable, TQL_SUGGESTION_DEBOUNCE_TIME_MS);
+                    }
+                    
+                    // Apply normal search filter
+                    filterTransactions(searchText);
+                }
+                // Note: TQL queries will only execute when user presses search button
             }
+        });
+
+        // Set up search action listener for keyboard search button
+        searchInput.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH || 
+                (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
+                
+                String searchText = searchInput.getText().toString();
+                Log.d(TAG, "Search action triggered: " + searchText);
+                
+                if (isTQLMode && !searchText.trim().isEmpty()) {
+                    // Execute TQL query with current date range
+                    Log.d(TAG, "Executing TQL query on search action: " + searchText);
+                    processTQLQueryWithDateRange(searchText, fromDate, toDate);
+                } else if (!isTQLMode && !searchText.trim().isEmpty()) {
+                    // Execute normal search
+                    filterTransactions(searchText);
+                }
+                
+                // Hide keyboard after search
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                imm.hideSoftInputFromWindow(searchInput.getWindowToken(), 0);
+                
+                return true;
+            }
+            return false;
         });
 
         // Set up clear button click
@@ -2406,6 +2869,117 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
         if (toDateButton != null) {
             toDateButton.setText(dateFormat.format(new Date(toDate)));
         }
+        
+        // Also update month navigation display
+        updateMonthNavigationDisplay();
+    }
+
+    private void setupMonthNavigation() {
+        MaterialButton previousMonthButton = findViewById(R.id.previousMonthButton);
+        MaterialButton nextMonthButton = findViewById(R.id.nextMonthButton);
+        TextView currentMonthText = findViewById(R.id.currentMonthText);
+
+        if (previousMonthButton != null) {
+            previousMonthButton.setOnClickListener(v -> navigateToPreviousMonth());
+        }
+
+        if (nextMonthButton != null) {
+            nextMonthButton.setOnClickListener(v -> navigateToNextMonth());
+        }
+
+        if (currentMonthText != null) {
+            currentMonthText.setOnClickListener(v -> showMonthYearPicker());
+        }
+
+        updateMonthNavigationDisplay();
+    }
+
+    private void navigateToPreviousMonth() {
+        Calendar cal = Calendar.getInstance();
+        cal.setTimeInMillis(fromDate);
+        cal.add(Calendar.MONTH, -1);
+        setDateRangeToMonth(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH));
+    }
+
+    private void navigateToNextMonth() {
+        Calendar cal = Calendar.getInstance();
+        cal.setTimeInMillis(fromDate);
+        cal.add(Calendar.MONTH, 1);
+        setDateRangeToMonth(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH));
+    }
+
+    private void setDateRangeToMonth(int year, int month) {
+        Calendar cal = Calendar.getInstance();
+        
+        // Start of month
+        cal.set(year, month, 1, 0, 0, 0);
+        cal.set(Calendar.MILLISECOND, 0);
+        fromDate = cal.getTimeInMillis();
+        
+        // End of month
+        cal.set(Calendar.DAY_OF_MONTH, cal.getActualMaximum(Calendar.DAY_OF_MONTH));
+        cal.set(Calendar.HOUR_OF_DAY, 23);
+        cal.set(Calendar.MINUTE, 59);
+        cal.set(Calendar.SECOND, 59);
+        cal.set(Calendar.MILLISECOND, 999);
+        toDate = cal.getTimeInMillis();
+        
+        updateDateButtonTexts();
+        updateMonthNavigationDisplay();
+        preferencesManager.saveSelectedDateRange(fromDate, toDate);
+        refreshTransactions();
+        
+        Log.d(TAG, "Set date range to: " + 
+              new SimpleDateFormat("MMM yyyy", Locale.getDefault()).format(new Date(fromDate)));
+    }
+
+    private void updateMonthNavigationDisplay() {
+        TextView currentMonthText = findViewById(R.id.currentMonthText);
+        if (currentMonthText != null) {
+            Calendar cal = Calendar.getInstance();
+            cal.setTimeInMillis(fromDate);
+            SimpleDateFormat monthFormat = new SimpleDateFormat("MMMM yyyy", Locale.getDefault());
+            currentMonthText.setText(monthFormat.format(cal.getTime()));
+        }
+    }
+
+    private void showMonthYearPicker() {
+        Calendar cal = Calendar.getInstance();
+        cal.setTimeInMillis(fromDate);
+        
+        // Create a simple dialog with month/year picker
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle("Select Month & Year");
+        
+        // Create a simple layout with spinners or use a custom picker
+        // For now, let's create a simple implementation
+        String[] months = {"January", "February", "March", "April", "May", "June",
+                          "July", "August", "September", "October", "November", "December"};
+        
+        int currentMonth = cal.get(Calendar.MONTH);
+        int currentYear = cal.get(Calendar.YEAR);
+        
+        // Create year options (current year ± 2 years)
+        String[] years = new String[5];
+        for (int i = 0; i < 5; i++) {
+            years[i] = String.valueOf(currentYear - 2 + i);
+        }
+        
+        // For simplicity, show month selection first
+        builder.setItems(months, (dialog, which) -> {
+            // After selecting month, show year selection
+            android.app.AlertDialog.Builder yearBuilder = new android.app.AlertDialog.Builder(this);
+            yearBuilder.setTitle("Select Year");
+            yearBuilder.setItems(years, (yearDialog, yearWhich) -> {
+                int selectedYear = currentYear - 2 + yearWhich;
+                setDateRangeToMonth(selectedYear, which);
+            });
+            yearBuilder.setNegativeButton("Cancel", null);
+            yearBuilder.show();
+        });
+        
+        builder.setNegativeButton("Cancel", null);
+        builder.show();
     }
 
     private void setupDefaultDates() {
@@ -2659,6 +3233,16 @@ public class MainActivity extends AppCompatActivity implements QuickEntryFragmen
         // Shutdown the ExecutorService
         if (executorService != null) {
             executorService.shutdown();
+        }
+        
+        // Clean up TQL handlers to prevent memory leaks
+        if (tqlHandler != null) {
+            if (pendingTQLRunnable != null) {
+                tqlHandler.removeCallbacks(pendingTQLRunnable);
+            }
+            if (pendingTQLSuggestionRunnable != null) {
+                tqlHandler.removeCallbacks(pendingTQLSuggestionRunnable);
+            }
         }
     }
 
